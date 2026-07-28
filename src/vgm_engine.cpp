@@ -692,7 +692,7 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
         if (vgm_c352_clock != 0) {
             uint8_t clkdiv = (vgmDataStart > 0xD6) ? header[0xD6] : 0;
             Serial.printf("[VGM] C352 Clock: %lu (Div: %d)\n", vgm_c352_clock & 0x3FFFFFFF, clkdiv);
-            pcm_engine_namco_init(&g_pcm_engine, vgm_c352_clock & 0x3FFFFFFF, 0xC2, 0);
+            pcm_engine_namco_init(&g_pcm_engine, vgm_c352_clock & 0x3FFFFFFF, 0xC2, clkdiv);
         }
     }
 
@@ -702,7 +702,7 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     global_chip_count = (active_chip_count > 0) ? active_chip_count : 1;
     Serial.printf("[VGM] Mixer: chip_count=%d\n", global_chip_count);
 
-    waitSamples = 0; vgm_time_acc = 0; ym2612_pcm_offset = 0;
+    waitSamples = 8820; vgm_time_acc = 0; ym2612_pcm_offset = 0;
     sn76489_writes = 0;
     rd = 0; wd = 0; wav_count = 0;
     
@@ -885,6 +885,9 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
         }
     }
     vgm_cmd_debug_count = 0; // ★この1行を追加！曲の開始時に必ずログカウンタをリセットする
+
+    // アンプの起動遅延（ミュート解除）を待つため、300ミリ秒間無音を流してアンプを完全に起こす
+    vTaskDelay(pdMS_TO_TICKS(300));
 
     prebuffering = true;
     isPlaying = true;

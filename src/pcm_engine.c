@@ -13,6 +13,11 @@ static uint32_t namco_mcache_addr[32];
 static uint8_t  namco_mcache_data[32][NAMCO_MCACHE_SIZE];
 
 // ─────────────────────────────────────────
+// Forward declarations
+// ─────────────────────────────────────────
+void pcm_engine_opn_tick(PCMSoundEngine *engine, int32_t *out_l, int32_t *out_r);
+
+// ─────────────────────────────────────────
 // Namco C140 / C352 LUT
 // ─────────────────────────────────────────
 static int16_t c352_mulaw_table[256];
@@ -687,7 +692,7 @@ void IRAM_ATTR pcm_engine_tick(PCMSoundEngine *engine, int32_t *out_l, int32_t *
 
                 int16_t new_sample = 0;
                 if (engine->c352_enabled) {
-                    if (v->mode & 0x0004) {
+                    if (v->mode & 0x0008) { // C352 MuLaw flag is bit 3 (0x0008)
                         new_sample = c352_mulaw_table[dt];
                     } else {
                         new_sample = (int16_t)((int8_t)dt) << 8;

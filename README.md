@@ -1,4 +1,4 @@
-# vgmM5 (v0.96)
+# vgmM5 (v0.97)
 vgm and mdx player for M5Stack
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -41,7 +41,8 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 | **Namco C140** | ✔️ 対応済 (Supported |
 | **Namco C352** | ✔️ 対応済 (Supported) |
 
-※ ステータスが「対応済」となっていても、もし再生時に音がおかしい・違和感があると感じた場合は、GitHubのIssueにて優しく教えていただけると嬉しいです！
+※ いくつかのチップのサウンドテストを経た安定板（v0.97）です。
+※ ステータスが「対応済」となっていても、もし再生時に音がおかしい・違和感があると感じた場合は、曲名とおかしい点を優しく申告していただければ対応いたします！
 
 ### 特徴
 - **オンラインモード**: Wi-Fiに接続することで、VGM/VGZXファイルをダウンロードする手間なく、クラウドのファイルを指定して再生できます。
@@ -52,7 +53,7 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 ### インストール方法 (M5 Burner)
 手軽に試す場合は、M5 Burnerから以下のシェアコードでファームウェアを直接書き込めます。
 
-- **M5Stack Cardputer用 シェアコード:** `t8Hru4wVixagKKmr`
+- **M5Stack Cardputer用 シェアコード:** `Rvu8ybi4QoFenMNM`
 - **M5Stack Atom Echo S3R用 シェアコード:** `c5t52qiD50X3eo58`
 
 ---
@@ -97,7 +98,8 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 #### Supported Sound Chips
 *(Please refer to the Supported Sound Chips table in the Japanese section above)*
 
-*Note: Even if a chip is listed as "Supported," if you notice any strange sounds or something feels off during playback, please kindly let me know by opening an issue!*
+*Note: This is a stable version (v0.97) after sound tests on various chips.*
+*Even if a chip is listed as "Supported," if you notice any strange sounds or something feels off during playback, please kindly report it (gently) with the song title and the issue, and I will address it!*
 
 ### Features
 - **Online Mode (Jukebox)**: Connect via Wi-Fi to play VGM/VGZ files directly from the cloud without the need to download and save them to a MicroSD card.
@@ -108,7 +110,7 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 ### Installation (via M5 Burner)
 For a quick and easy start, you can flash the firmware directly to your device using M5 Burner with the following share codes:
 
-- **M5Stack Cardputer Share Code:** `t8Hru4wVixagKKmr`
+- **M5Stack Cardputer Share Code:** `Rvu8ybi4QoFenMNM`
 - **M5Stack Atom Echo S3R Share Code:** `c5t52qiD50X3eo58`
 
 ---

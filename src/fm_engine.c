@@ -207,7 +207,10 @@ static void update_phase_step_ym2612(FMSoundEngine *engine, int ch) {
         uint8_t dt_val = dt1 & 3;
         uint8_t dt_mag = DT_TAB[dt_val][kc];
         int32_t dt_add = (dt1 & 4) ? -dt_mag : dt_mag;
-        int32_t dt_step = dt_add * 4946; 
+        
+        // Clock-based detune factor: dynamic calculation instead of hardcoded 4946
+        uint32_t dt_factor = is_ym2612_family ? engine->ym2612_fnum_tab[1] : (engine->ym2612_fnum_tab[1] * 2);
+        int32_t dt_step = dt_add * dt_factor; 
 
         if (dt_step < 0 && step < (uint32_t)(-dt_step)) {
             step = 0;
@@ -447,30 +450,27 @@ static IRAM_ATTR __attribute__((always_inline, optimize("O3"))) inline int32_t c
     uint32_t idx = (phase_12bit + mod_idx) & 0xFFF;
     
     int32_t out;
-    if (is_noise) {
-        int32_t noise_val;
-        // Advance RNG state locally to guarantee high-frequency noise
-        engine->noise_rng ^= engine->noise_rng << 13;
-        engine->noise_rng ^= engine->noise_rng >> 17;
-        engine->noise_rng ^= engine->noise_rng << 5;
-        
-        if (is_noise == 2) {
-            // Metallic/Hi-Hat: High pass the noise (simple approximation)
-            static int32_t last_noise = 0;
-            int32_t raw_noise = (int32_t)(engine->noise_rng & 0x7FFF) - 16384;
-            noise_val = (raw_noise - last_noise) >> 1;
-            last_noise = raw_noise;
-        } else {
-            // Snare: Standard white noise
-            noise_val = (int32_t)(engine->noise_rng & 0x7FFF) - 16384; 
-            noise_val >>= 1; 
-        }
-        noise_val = (noise_val * 3) >> 2; 
+     if (is_noise) {
+         int32_t noise_val;
+         // Fix: Remove local RNG update (root cause of pitch fluctuation)
+         // RNG is now updated globally once per sample in fm_engine_tick
+         int32_t raw_noise = (int32_t)(engine->noise_rng & 0x7FFF) - 16384;
+         
+         if (is_noise == 2) {
+             // Fix: Remove static variable (root cause of cross-channel pollution)
+             // Use own phase (idx) MSB to flip polarity - stateless and hardware-accurate
+             noise_val = (idx & 0x400) ? raw_noise : -raw_noise;
+             noise_val >>= 1; 
+         } else {
+             // Snare: Standard white noise
+             noise_val = raw_noise >> 1; 
+         }
+         noise_val = (noise_val * 3) >> 2; 
         uint32_t exp_shift = current_atten >> 8;
         uint32_t exp_idx = current_atten & 0xFF;
         uint32_t e = EXP_TAB[exp_idx] >> exp_shift;
-        out = (noise_val * (int32_t)e) >> 14;
-    } else {
+         out = (noise_val * (int32_t)e) >> 14;
+     } else {
         uint32_t sin_idx = idx & 0x3FF;          
         if (idx & 0x400) sin_idx = 1023 - sin_idx; 
         int is_negative = (idx & 0x800); 
@@ -636,7 +636,12 @@ void fm_engine_init(FMSoundEngine *engine, uint32_t sample_rate, uint32_t clock,
     engine->clock = clock;
     engine->chip_type = chip_type;
     engine->noise_rng = 1;
-    engine->lfo_step = (uint32_t)((5.0 * 4294967296.0) / sample_rate); 
+    // OPN系チップはLFOを停止状態で初期化する
+    if (engine->chip_type == CHIP_YM2612 || engine->chip_type == CHIP_YM2203 || engine->chip_type == CHIP_YM2608 || engine->chip_type == CHIP_YM2610) {
+        engine->lfo_step = 0; // YM2203はLFO自体が存在せず、YM2612等はレジスタ0x22で有効化されるまで停止
+    } else {
+        engine->lfo_step = (uint32_t)((5.0 * 4294967296.0) / engine->sample_rate); 
+    }
     engine->opl2_lfo_am_step = (uint32_t)((3.7f * 4294967296.0f) / (float)sample_rate);
     engine->opl2_lfo_pm_step = (uint32_t)((6.1f * 4294967296.0f) / (float)sample_rate);
     
@@ -688,22 +693,22 @@ void fm_engine_write_ym2151(FMSoundEngine *engine, uint16_t addr, uint8_t data) 
         int ch = data & 7;
         if ((data >> 3) & 1) {
             if (engine->ops[ch*4+0].env_state == EG_OFF) engine->ops[ch*4+0].env_level = EG_MAX;
-            engine->ops[ch*4+0].env_state = EG_ATTACK; engine->ops[ch*4+0].phase = 0;
+            engine->ops[ch*4+0].env_state = EG_ATTACK;
         } else if (engine->ops[ch*4+0].env_state != EG_OFF) engine->ops[ch*4+0].env_state = EG_RELEASE;
 
         if ((data >> 4) & 1) { // M2 (Slot 2)
             if (engine->ops[ch*4+1].env_state == EG_OFF) engine->ops[ch*4+1].env_level = EG_MAX;
-            engine->ops[ch*4+1].env_state = EG_ATTACK; engine->ops[ch*4+1].phase = 0;
+            engine->ops[ch*4+1].env_state = EG_ATTACK;
         } else if (engine->ops[ch*4+1].env_state != EG_OFF) engine->ops[ch*4+1].env_state = EG_RELEASE;
 
         if ((data >> 5) & 1) { // C1 (Slot 3)
             if (engine->ops[ch*4+2].env_state == EG_OFF) engine->ops[ch*4+2].env_level = EG_MAX;
-            engine->ops[ch*4+2].env_state = EG_ATTACK; engine->ops[ch*4+2].phase = 0;
+            engine->ops[ch*4+2].env_state = EG_ATTACK;
         } else if (engine->ops[ch*4+2].env_state != EG_OFF) engine->ops[ch*4+2].env_state = EG_RELEASE;
 
         if ((data >> 6) & 1) { // C2 (Slot 4)
             if (engine->ops[ch*4+3].env_state == EG_OFF) engine->ops[ch*4+3].env_level = EG_MAX;
-            engine->ops[ch*4+3].env_state = EG_ATTACK; engine->ops[ch*4+3].phase = 0;
+            engine->ops[ch*4+3].env_state = EG_ATTACK;
         } else if (engine->ops[ch*4+3].env_state != EG_OFF) engine->ops[ch*4+3].env_state = EG_RELEASE;
         return;
     }
@@ -791,7 +796,6 @@ void fm_engine_write_ym2612(FMSoundEngine *engine, uint8_t port, uint8_t addr, u
                     engine->ops[idx].ssg_inverted = 0;
                 }
                 engine->ops[idx].env_state = EG_ATTACK;
-                engine->ops[idx].phase = 0;
             } else {
                 if (engine->ops[idx].env_state != EG_OFF) engine->ops[idx].env_state = EG_RELEASE;
             }
@@ -800,6 +804,7 @@ void fm_engine_write_ym2612(FMSoundEngine *engine, uint8_t port, uint8_t addr, u
     }
     
     if (addr == 0x22) {
+        if (engine->chip_type == CHIP_YM2203) return; // YM2203はLFO非対応
         if (data & 8) {
             static float lfo_freqs[8] = { 3.98f, 5.56f, 6.02f, 6.37f, 6.88f, 9.63f, 48.1f, 72.2f };
             float freq = lfo_freqs[data & 7];
@@ -853,6 +858,7 @@ void fm_engine_write_ym2612(FMSoundEngine *engine, uint8_t port, uint8_t addr, u
         engine->algo[ch] = data & 7;
         update_algorithm_routing(engine, ch, engine->algo[ch]);
     } else if (addr >= 0xB4 && addr <= 0xB6) {
+        if (engine->chip_type == CHIP_YM2203) return; // YM2203はPan/LFOデプスレジスタ非対応
         ch = (addr - 0xB4); if (port == 1) ch += 3;
         engine->pan_l[ch] = (data >> 7) & 1;
         engine->pan_r[ch] = (data >> 6) & 1;
@@ -868,7 +874,11 @@ void fm_engine_write_ym2612(FMSoundEngine *engine, uint8_t port, uint8_t addr, u
             case 0x60: engine->ops[idx].dr = data & 0x1F; engine->ops[idx].am_enable = (data >> 7) & 1; update_eg_rates_ym2612(engine, ch); break;
             case 0x70: engine->ops[idx].d2r = data & 0x1F; update_eg_rates_ym2612(engine, ch); break;
             case 0x80: { int d1l = (data >> 4) & 0x0F; engine->ops[idx].sl_level = (d1l == 15) ? EG_MAX : ((d1l * 4) * 32 << EG_FRACTION_BITS); int rr = data & 0x0F; engine->ops[idx].rr = rr ? rr * 2 + 1 : 0; update_eg_rates_ym2612(engine, ch); } break;
-            case 0x90: engine->ops[idx].ssg_eg_mode = data & 0x0F; break;
+            case 0x90: 
+                if (engine->chip_type != CHIP_YM2203) { // YM2203はSSG-EG非対応
+                    engine->ops[idx].ssg_eg_mode = data & 0x0F; 
+                }
+                break;
         }
     }
 }
@@ -900,8 +910,8 @@ void fm_engine_write_opl(FMSoundEngine *engine, uint8_t addr, uint8_t data) {
             uint8_t prev_key_on = engine->kc[ch] & 0x20;
             engine->kc[ch] = data; 
             if ((data & 0x20) && !prev_key_on) { 
-                engine->ops[ch*4+0].env_level = EG_MAX; engine->ops[ch*4+0].phase = 0;
-                engine->ops[ch*4+1].env_level = EG_MAX; engine->ops[ch*4+1].phase = 0;
+                if (engine->ops[ch*4+0].env_state == EG_OFF) engine->ops[ch*4+0].env_level = EG_MAX;
+                if (engine->ops[ch*4+1].env_state == EG_OFF) engine->ops[ch*4+1].env_level = EG_MAX;
                 engine->ops[ch*4+0].env_state = EG_ATTACK;
                 engine->ops[ch*4+1].env_state = EG_ATTACK;
             } else if (!(data & 0x20) && prev_key_on) { 
@@ -940,10 +950,10 @@ void fm_engine_write_opl(FMSoundEngine *engine, uint8_t addr, uint8_t data) {
                 for(int i=0; i<5; i++) {
                     int idx = ops[i];
                     if (trg & bits[i]) {
-                        engine->ops[idx].env_level = EG_MAX; engine->ops[idx].phase = 0;
+                        if (engine->ops[idx].env_state == EG_OFF) engine->ops[idx].env_level = EG_MAX;
                         engine->ops[idx].env_state = EG_ATTACK;
                         if (i == 0) {
-                            engine->ops[25].env_level = EG_MAX; engine->ops[25].phase = 0;
+                            if (engine->ops[25].env_state == EG_OFF) engine->ops[25].env_level = EG_MAX;
                             engine->ops[25].env_state = EG_ATTACK;
                         }
                     } else if (rel & bits[i]) {
@@ -1105,7 +1115,8 @@ __attribute__((optimize("O3"))) void IRAM_ATTR fm_engine_tick(FMSoundEngine *eng
     int32_t global_am = 0;
 
     engine->lfo_phase += engine->lfo_step; // LFOは常に回し続ける
-    if (engine->pmd > 0 || engine->amd > 0) {
+    // OPN family also needs LFO when lfo_step > 0 (set via YM2612 addr 0x22)
+    if (engine->pmd > 0 || engine->amd > 0 || engine->lfo_step > 0) {
 
         uint32_t p = (engine->lfo_phase >> 24) & 0xFF;
         
@@ -1167,15 +1178,15 @@ __attribute__((optimize("O3"))) void IRAM_ATTR fm_engine_tick(FMSoundEngine *eng
                     int32_t bd_mod = (engine->algo[ch] == 0) ? (o0 >> 1) : 0;
                     int32_t o1 = calc_op_internal(engine, b+1, bd_mod, engine->ops[b+1].pm_enable?ch_pm:0, engine->ops[b+1].am_enable?ch_am:0, 0, 1, 1);
                     // BD: Operator 1 output is ignored when connect=1.
-                    ch_out = o1 << 1;
+                    ch_out = o1;
                 } else if (ch == 7) {
                     int32_t sd_out = calc_op_internal(engine, b+1, 0, engine->ops[b+1].pm_enable?ch_pm:0, engine->ops[b+1].am_enable?ch_am:0, 1, 1, 1);
                     int32_t hh_out = calc_op_internal(engine, b+0, 0, engine->ops[b+0].pm_enable?ch_pm:0, engine->ops[b+0].am_enable?ch_am:0, 2, 1, 1);
-                    ch_out = (sd_out + hh_out) << 1;
+                    ch_out = (sd_out + hh_out);
                 } else if (ch == 8) {
                     int32_t tom_out = calc_op_internal(engine, b+0, 0, engine->ops[b+0].pm_enable?ch_pm:0, engine->ops[b+0].am_enable?ch_am:0, 0, 1, 1);
                     int32_t tc_out = calc_op_internal(engine, b+1, 0, engine->ops[b+1].pm_enable?ch_pm:0, engine->ops[b+1].am_enable?ch_am:0, 2, 1, 1);
-                    ch_out = (tom_out + tc_out) << 1;
+                    ch_out = (tom_out + tc_out);
                 }
             } else {
                 int32_t mod0 = fb_mod;
@@ -1189,9 +1200,9 @@ __attribute__((optimize("O3"))) void IRAM_ATTR fm_engine_tick(FMSoundEngine *eng
                 int32_t out1 = calc_op_internal(engine, b+1, mod1, engine->ops[b+1].pm_enable?ch_pm:0, engine->ops[b+1].am_enable?ch_am:0, 0, 1, 1);
                 
                 if ((engine->algo[ch] & 1) == 0) {
-                    ch_out = out1 << 1;
+                    ch_out = out1;
                 } else {
-                    ch_out = (out0 + out1) << 1;
+                    ch_out = (out0 + out1);
                 }
             }
             mix_l += ch_out * engine->pan_l[ch];
@@ -1231,7 +1242,7 @@ __attribute__((optimize("O3"))) void IRAM_ATTR fm_engine_tick(FMSoundEngine *eng
             //                algo 5 needs M1->M2,C1,C2 simultaneously.
             static uint8_t opn_algo_mem_dst[8] = { 5, 5, 5, 5, 5, 5, 5, 5 };
             static uint8_t opn_algo_dst_m1[8]  = { 2, 1, 3, 2, 2, 2, 2, 4 };
-            static uint8_t opn_algo_dst_m2[8]  = { 1, 1, 1, 1, 3, 4, 4, 4 };
+            static uint8_t opn_algo_dst_m2[8]  = { 1, 1, 1, 3, 4, 4, 4, 4 }; // Algo3: C1->OP4(bus3), Algo4: C1->MIX(bus4)
             static uint8_t opn_algo_dst_c1[8]  = { 3, 3, 3, 3, 3, 4, 4, 4 };
             static uint8_t opn_algo_dst_c2[8]  = { 4, 4, 4, 4, 4, 4, 4, 4 };
 
@@ -1250,11 +1261,11 @@ __attribute__((optimize("O3"))) void IRAM_ATTR fm_engine_tick(FMSoundEngine *eng
             engine->fb_memory[ch][0] = engine->fb_memory[ch][1];
             engine->fb_memory[ch][1] = out0;
             bus[algo_dst_m1[algo]] += out0;
-            if (is_ym2151) {
-                if (algo == 5) { bus[1] += out0; bus[3] += out0; } // OPM algo 5
-            } else {
-                if (algo == 3 || algo == 4) { bus[1] += out0; }
-                if (algo == 5)              { bus[1] += out0; bus[3] += out0; }
+            
+            // OPM/OPN共通: アルゴリズム5はOP1から残り3オペレータすべてに分配(bus1, bus3追加)
+            if (algo == 5) {
+                bus[1] += out0;
+                bus[3] += out0;
             }
 
             int32_t mod1 = bus[2];
