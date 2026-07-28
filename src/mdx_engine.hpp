@@ -14,10 +14,11 @@ extern "C" {
 // MDXエンジン初期化（setup()から呼ぶ）
 void mdx_engine_init(void);
 
-// MDXファイルを再生開始する（SDカードから読み込み）
+// MDXファイルを再生開始する
 // mdx_path: MDXファイルのフルパス（例: "/MDX/VOCALOID.MDX"）
+// use_sd: true=SDカードから読み込み, false=FFat（内蔵フラッシュ）から読み込み
 // 戻り値: true=成功, false=失敗
-bool mdx_engine_play(const char *mdx_path);
+bool mdx_engine_play(const char *mdx_path, bool use_sd = true);
 
 // 再生を停止する
 void mdx_engine_stop(void);

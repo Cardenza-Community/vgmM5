@@ -21,6 +21,7 @@ struct mdx_adpcm_channel {
     int      fin;
     uint8_t  slot;
     uint8_t  pan;
+    int      sample_rate;
 };
 
 struct mdx_adpcm {

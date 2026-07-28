@@ -15,12 +15,16 @@ vgm and mdx player for M5Stack
 vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイルプレイヤーです。
 🎥 **動作風景 (Demonstration):** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
-#### 対応デバイス (Supported Devices)
-| デバイス (Device) | ステータス (Status) | 備考 (Notes) |
-| :--- | :--- | :--- |
-| **M5Stack AtomS3R (Echo)** | ✔️ 対応済 (Supported) | 内蔵フラッシュUSBドライブ対応 |
-| **M5Stack Cardputer** | ✔️ 対応済 (Supported) | MicroSD & Onine & MDX & Keyboard対応|
-| **M5Stack CoreS3** | 🔮 将来対応予定 (Future) | |
+#### 対応デバイスと機能 (Supported Devices & Features)
+| 機能 (Features) \ デバイス (Device) | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| :--- | :---: | :---: | :---: | :---: |
+| **ステータス (Status)** | ✔️ 対応済 | ✔️ 対応済 | 🔮 予定 | 🔮 予定 |
+| **VGM/VGZ 再生** | ✔️ | ✔️ | 🔮 | 🔮 |
+| **MDX 再生** | ✔️ | ✔️ | 🔮 | 🔮 |
+| **内蔵フラッシュ (USB Drive)** | ✔️ | - | 🔮 | 🔮 |
+| **MicroSD** | - | ✔️ | 🔮 | 🔮 |
+| **オンラインモード** | - | ✔️ | 🔮 | 🔮 |
+| **キーボード操作** | - | ✔️ | - | - |
 
 #### 対応音源チップ (Supported Sound Chips)
 | チップ名 (Chip) | ステータス (Status) |
@@ -54,7 +58,7 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 手軽に試す場合は、M5 Burnerから以下のシェアコードでファームウェアを直接書き込めます。
 
 - **M5Stack Cardputer用 シェアコード:** `Rvu8ybi4QoFenMNM`
-- **M5Stack Atom Echo S3R用 シェアコード:** `c5t52qiD50X3eo58`
+- **M5Stack Atom Echo S3R用 シェアコード:** `RFZVJ0k81yqvL6BK`
 
 ---
 
@@ -74,8 +78,8 @@ Cardputer版はMicroSDカード内のファイル再生に加え、オンライ�
 - オンラインモードでは、アルバムや曲のリストを読み込み、選択するだけでジュークボックスのように自動で再生が始まります。
 
 #### 🎧 M5Stack Atom Echo S3R
-AtomS3Rは画面表示を持たず、メインボタンで操作します。起動時は一時停止状態で開始します。
-- **1クリック**: 再生 / 一時停止
+AtomS3Rは画面表示を持たず、メインボタンで操作します。起動時は無音状態で待機します。
+- **1クリック**: 再生 / 停止
 - **ダブルクリック**: 次の曲
 - **トリプルクリック**: 前の曲
 - **起動中にボタン長押し**: USBドライブモードに入り、PCから直接ファイルを追加できます。
@@ -88,12 +92,16 @@ AtomS3Rは画面表示を持たず、メインボタンで操作します。起�
 vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5Stack series.
 🎥 **Demonstration:** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
-#### Supported Devices
-| Device | Status | Notes |
-| :--- | :--- | :--- |
-| **M5Stack AtomS3R (Echo)** | ✔️ Supported | Supports built-in Flash USB Drive |
-| **M5Stack Cardputer** | ✔️ Supported | MicroSD & Online & Keyboard & MDX Support |
-| **M5Stack CoreS3** | 🔮 Future | |
+#### Supported Devices & Features
+| Features \ Device | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Status** | ✔️ Supported | ✔️ Supported | 🔮 Future | 🔮 Future |
+| **VGM/VGZ Playback** | ✔️ | ✔️ | 🔮 | 🔮 |
+| **MDX Playback** | ✔️ | ✔️ | 🔮 | 🔮 |
+| **Internal Flash (USB Drive)** | ✔️ | - | 🔮 | 🔮 |
+| **MicroSD** | - | ✔️ | 🔮 | 🔮 |
+| **Online Mode** | - | ✔️ | 🔮 | 🔮 |
+| **Keyboard Control** | - | ✔️ | - | - |
 
 #### Supported Sound Chips
 *(Please refer to the Supported Sound Chips table in the Japanese section above)*
@@ -111,7 +119,7 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 For a quick and easy start, you can flash the firmware directly to your device using M5 Burner with the following share codes:
 
 - **M5Stack Cardputer Share Code:** `Rvu8ybi4QoFenMNM`
-- **M5Stack Atom Echo S3R Share Code:** `c5t52qiD50X3eo58`
+- **M5Stack Atom Echo S3R Share Code:** `RFZVJ0k81yqvL6BK`
 
 ---
 
@@ -131,8 +139,8 @@ The Cardputer version plays files directly from a MicroSD card and supports stre
 - In Online Mode, simply browse through albums or tracks and select one to start streaming automatically like a jukebox.
 
 #### 🎧 M5Stack Atom Echo S3R
-The AtomS3R version runs headlessly and is controlled via the main screen button. It boots into a paused state.
-- **1 Click**: Play / Pause
+The AtomS3R version runs headlessly and is controlled via the main screen button. It boots into a silent idle state.
+- **1 Click**: Play / Stop
 - **Double Click**: Next Track
 - **Triple Click**: Previous Track
 - **Hold while booting**: Enters USB Drive Mode to add files from your PC.

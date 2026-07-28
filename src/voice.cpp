@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include "vgm_engine.h"
+#include "mdx_engine.hpp"
 #include "esp_bt.h"  // ★これを追加
 
 // AtomS3 specific
@@ -19,7 +20,6 @@
 #include "filer.hpp"
 #include "wifi_manager.hpp"
 #include "cloud_db.hpp"
-#include "mdx_engine.hpp"
 #include <Preferences.h>
 Preferences recentPrefs;
 uint16_t recent_albums[5] = {0};
@@ -54,6 +54,8 @@ void add_recent_album(uint16_t album_id) {
 #include "composer_sort.hpp"
 #include "cache_manager.hpp"
 #endif
+
+static bool cloud_force_redraw = true;
 
 // ============================================================================
 // 1. 初期化・設定フェーズ (Initialization)
@@ -149,6 +151,7 @@ void setup() {
 
     // 共通の再生エンジン初期化（I2S等の設定）
     vgm_engine_init();
+    mdx_engine_init(); // MDXエンジン初期化（FreeRTOSタスク生成）
 
     // boardに合わせた初期化処理
 #if defined(IS_CARDPUTER)
@@ -165,13 +168,13 @@ void setup() {
             Serial.println("SD Card Initialized.");
             cache_manager_init();
         }
-        mdx_engine_init(); // MDXエンジン初期化（FreeRTOSタスク生成）
 #elif defined(IS_ATOMS3)
         Serial.println("Initializing AtomS3 Board...");
         M5.update();
         if (M5.BtnA.isPressed()) {
             enter_usb_mode();
         }
+        USB.begin(); // TinyUSB初期化（シリアルログ出力用）
         if (!FFat.begin(true)) {
             Serial.println("FFat Mount Failed!");
             return;
@@ -202,7 +205,7 @@ void atoms3_load_files() {
             String fname = file.name();
             if (!fname.startsWith("/")) fname = "/" + fname;
             String lname = fname; lname.toLowerCase();
-            if (lname.endsWith(".vgm") || lname.endsWith(".vgz")) {
+            if (lname.endsWith(".vgm") || lname.endsWith(".vgz") || lname.endsWith(".mdx")) {
                 atoms3_file_list[atoms3_file_count] = fname;
                 atoms3_file_count++;
             }
@@ -260,7 +263,6 @@ static int            saved_cursor_composer = 0;
 static int            saved_cursor_chip     = 0;
 static int            saved_cursor_album    = 0;
 static UIState        parent_state_of_album = STATE_TOP_MENU;
-static bool      cloud_force_redraw = true;
 #ifndef VERSION
 #define VERSION 0.94
 #endif
@@ -1337,26 +1339,93 @@ case STATE_CHIP_LIST: {
 
 // 待機中（ファイル選択モード）の処理 — AtomS3 version
 #if defined(IS_ATOMS3)
+static void atoms3_play_current();
+
+// 再生時・停止時共通のボタン判定関数
+static void atoms3_handle_buttons() {
+    M5.update();
+    static int clickCount = 0;
+    static unsigned long lastClickTime = 0;
+
+    if (M5.BtnA.wasPressed()) {
+        unsigned long currentMillis = millis();
+        if (currentMillis - lastClickTime < 400) clickCount++;
+        else clickCount = 1;
+        lastClickTime = currentMillis;
+    }
+
+    if (clickCount == 1 && (millis() - lastClickTime >= 400)) {
+        bool is_playing = vgm_engine_is_playing() || mdx_engine_is_playing();
+        if (is_playing) {
+            Serial.println("AtomS3: Stop Playback");
+            vgm_engine_stop();
+            mdx_engine_stop();
+        } else {
+            Serial.println("AtomS3: Start Playback");
+            atoms3_play_current();
+        }
+        clickCount = 0;
+    } else if (clickCount == 2 && (millis() - lastClickTime >= 400)) {
+        Serial.println("AtomS3: Next Track");
+        if (atoms3_file_count > 0) {
+            current_file_index = (current_file_index + 1) % atoms3_file_count;
+            atoms3_play_current();
+        }
+        clickCount = 0;
+    } else if (clickCount >= 3) {
+        Serial.println("AtomS3: Previous Track");
+        if (atoms3_file_count > 0) {
+            current_file_index = (current_file_index - 1 + atoms3_file_count) % atoms3_file_count;
+            atoms3_play_current();
+        }
+        clickCount = 0;
+    }
+}
+
 void phase_file_selection() {
     static bool initialized = false;
     if (!initialized) {
         atoms3_load_files();
         if (atoms3_file_count > 0) {
-            Serial.printf("AtomS3: Found %d VGM files. Ready to play.\n", atoms3_file_count);
+            Serial.printf("AtomS3: Found %d songs. Ready to play.\n", atoms3_file_count);
             current_file_index = 0;
-            vgm_engine_play(atoms3_file_list[current_file_index].c_str(), false);
-            vgm_engine_toggle_pause();
+            // 起動時は自動再生せず、無音待機
         } else {
-            Serial.println("AtomS3: No VGM files found. Entering idle state.");
+            Serial.println("AtomS3: No songs found. Entering idle state.");
         }
         initialized = true;
-    } else {
-        if (atoms3_file_count > 0) {
-            current_file_index = (current_file_index + 1) % atoms3_file_count;
-            vgm_engine_play(atoms3_file_list[current_file_index].c_str(), false);
+    }
+
+    // 停止中もボタン操作を監視
+    atoms3_handle_buttons();
+}
+
+static void atoms3_play_current() {
+    if (atoms3_file_count <= 0) return;
+    String fname = atoms3_file_list[current_file_index];
+    String lname = fname; lname.toLowerCase();
+    
+    // Stop any running engine first
+    vgm_engine_stop();
+    mdx_engine_stop();
+    delay(50);
+    
+    if (lname.endsWith(".mdx")) {
+        Serial.printf("AtomS3: Playing MDX %s\n", fname.c_str());
+        // AtomS3ではSDカードがないため、第2引数に false を指定して FFat で開く
+        if (mdx_engine_play(fname.c_str(), false)) {
+            const char* title = mdx_engine_get_title();
+            if (title == nullptr || title[0] == '\0') {
+                const char* basename = strrchr(fname.c_str(), '/');
+                title = basename ? basename + 1 : fname.c_str();
+            }
+            Serial.printf("AtomS3: MDX Title: %s\n", title);
         } else {
-            delay(1000);
+            Serial.printf("AtomS3: MDX Play Failed: %s\n", mdx_engine_get_error());
         }
+    } else {
+        Serial.printf("AtomS3: Playing VGM %s\n", fname.c_str());
+        vgm_engine_play(fname.c_str(), false);
     }
 }
 #endif
@@ -1435,33 +1504,8 @@ void phase_playback() {
 
         }
 #elif defined(IS_ATOMS3)
-        M5.update();
-        static int clickCount = 0;
-        static unsigned long lastClickTime = 0;
-        if (M5.BtnA.wasPressed()) {
-            unsigned long currentMillis = millis();
-            if (currentMillis - lastClickTime < 400) clickCount++;
-            else clickCount = 1;
-            lastClickTime = currentMillis;
-        }
-
-        if (clickCount == 1 && (millis() - lastClickTime >= 400)) {
-            Serial.println("AtomS3: Pause/Resume");
-            vgm_engine_toggle_pause();
-            clickCount = 0;
-        } else if (clickCount == 2 && (millis() - lastClickTime >= 400)) {
-            Serial.println("AtomS3: Next Track");
-            vgm_engine_stop();
-            current_file_index = (current_file_index + 1) % atoms3_file_count;
-            vgm_engine_play(atoms3_file_list[current_file_index].c_str(), false);
-            clickCount = 0;
-        } else if (clickCount >= 3) {
-            Serial.println("AtomS3: Previous Track");
-            vgm_engine_stop();
-            current_file_index = (current_file_index - 1 + atoms3_file_count) % atoms3_file_count;
-            vgm_engine_play(atoms3_file_list[current_file_index].c_str(), false);
-            clickCount = 0;
-        }
+        // 再生中も共通のボタン処理を呼び出す
+        atoms3_handle_buttons();
 #endif
 }
 

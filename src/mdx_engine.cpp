@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include <SD.h>
+#include <FFat.h>
 #include <M5Unified.h>
 #include "mdx_engine.hpp"
 #include "vgm_engine.h"   // 共有バッファ参照
@@ -68,6 +69,7 @@ static char          s_title[256]    = {0};
 static char          s_error[128]    = {0};
 static volatile bool s_is_playing    = false;
 static volatile bool s_stop_request  = false;
+static bool          s_use_sd        = true;
 
 static TaskHandle_t s_gen_task_handle = NULL;  // MDX生成タスク (Core 0)
 
@@ -85,11 +87,11 @@ static bool find_pdx_file(const char *mdx_path, const char *pdx_name, char *out,
     }
 
     snprintf(out, out_len, "%s%s", dir, pdx_name);
-    if (SD.exists(out)) return true;
+    if (s_use_sd ? SD.exists(out) : FFat.exists(out)) return true;
     snprintf(out, out_len, "%s%s.PDX", dir, pdx_name);
-    if (SD.exists(out)) return true;
+    if (s_use_sd ? SD.exists(out) : FFat.exists(out)) return true;
     snprintf(out, out_len, "%s%s.pdx", dir, pdx_name);
-    if (SD.exists(out)) return true;
+    if (s_use_sd ? SD.exists(out) : FFat.exists(out)) return true;
 
     out[0] = '\0';
     return false;
@@ -98,8 +100,10 @@ static bool find_pdx_file(const char *mdx_path, const char *pdx_name, char *out,
 // PDXファイルのロードとADPCMデコード（Flash vgm_swapパーティションへMMAP）
 static bool load_pdx(const char *pdx_path) {
     Serial.printf("[MDX::PDX] Opening: %s\n", pdx_path);
-    File f = SD.open(pdx_path);
-    if (!f) { Serial.println("[MDX::PDX] FAIL: SD.open"); return false; }
+    File f;
+    if (s_use_sd) f = SD.open(pdx_path);
+    else f = FFat.open(pdx_path);
+    if (!f) { Serial.println("[MDX::PDX] FAIL: File open"); return false; }
 
     int pdxlen = (int)f.size();
     Serial.printf("[MDX::PDX] File size: %d bytes\n", pdxlen);
@@ -242,7 +246,9 @@ static bool load_mdx(const char *mdx_path) {
     memset(&s_mdx_file, 0, sizeof(s_mdx_file));
     memset(&s_pdx_file, 0, sizeof(s_pdx_file));
 
-    File mdx_fd = SD.open(mdx_path);
+    File mdx_fd;
+    if (s_use_sd) mdx_fd = SD.open(mdx_path);
+    else mdx_fd = FFat.open(mdx_path);
     if (!mdx_fd) { snprintf(s_error, sizeof(s_error), "Open failed: %s", mdx_path); Serial.printf("[MDX::LOAD] FAIL: %s\n", s_error); return false; }
 
     int mdxlen = (int)mdx_fd.size();
@@ -435,7 +441,8 @@ void mdx_engine_init(void) {
     );
 }
 
-bool mdx_engine_play(const char *mdx_path) {
+bool mdx_engine_play(const char *mdx_path, bool use_sd) {
+    s_use_sd = use_sd;
     Serial.printf("[MDX::PLAY] Requested: %s\n", mdx_path);
     Serial.printf("[MDX::PLAY] vgm_playing=%d  mdx_playing=%d\n", vgm_engine_is_playing(), s_is_playing);
     

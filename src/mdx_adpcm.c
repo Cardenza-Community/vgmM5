@@ -39,8 +39,8 @@ static int32_t channel_get_sample(struct mdx_adpcm_channel *ch) {
     int32_t sample = (int32_t)ch->chdata[ch->data_pos];
 
     ch->cnt += mdx_adpcm_freqtbl[ch->freq_num];
-    if (ch->cnt >= 44100) {
-        ch->cnt -= 44100;
+    if (ch->cnt >= ch->sample_rate) {
+        ch->cnt -= ch->sample_rate;
         ch->data_pos++;
         if (ch->data_pos >= ch->data_len) {
             ch->data_pos = 0;
@@ -103,9 +103,9 @@ int mdx_adpcm_set_pan(struct mdx_adpcm *driver, uint8_t channel, uint8_t pan) {
 }
 
 int mdx_adpcm_init(struct mdx_adpcm *driver, int sample_rate) {
-    (void)sample_rate;
     for (int i = 0; i < 8; i++) {
         channel_init(&driver->channels[i]);
+        driver->channels[i].sample_rate = sample_rate;
     }
     return 0;
 }

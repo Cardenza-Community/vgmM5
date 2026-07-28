@@ -68,7 +68,11 @@ static volatile bool isPaused = false;
 static SemaphoreHandle_t xSemaphore = NULL;
 TaskHandle_t playTaskHandle = NULL;
 
+#if defined(IS_ATOMS3)
+uint32_t actual_sample_rate = 48000;
+#else
 uint32_t actual_sample_rate = 44100;
+#endif
 uint8_t chip_type = 0;
 bool prebuffering = false;
 int currentSong = 0;
@@ -579,7 +583,11 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     
     vgmSeek(vgmDataStart);
     uint32_t vgm_version = header[0x08] | (header[0x09] << 8) | (header[0x0A] << 16) | (header[0x0B] << 24);
+#if defined(IS_ATOMS3)
+    actual_sample_rate = 48000;
+#else
     actual_sample_rate = 44100;
+#endif
     
     // Initialize PCM engine first before loading any specific PCM chips or ROMs
     pcm_engine_init(&g_pcm_engine, actual_sample_rate);
@@ -1240,7 +1248,19 @@ void audio_play_task(void *args) {
         }
         if (any_playing && wav_count > 0 && !prebuffering) {
             // VGM / MDX どちらのデータでもバッファを消費して再生する
+#if defined(IS_ATOMS3)
+            // AtomS3R環境での「1オクターブ下がる(半速再生になる)」現象への対策
+            // M5Unifiedのバグを回避するため、自前でMonoにダウンミックスしてから渡す
+            static int16_t mono_buff[512];
+            int frames = wav_buff_size[rd];
+            for (int i = 0; i < frames; i++) {
+                // 48kHz化で音量が安定したため、/2に戻して正常な音量を回復
+                mono_buff[i] = (wav_buff[rd][i * 2] + wav_buff[rd][i * 2 + 1]) / 2;
+            }
+            bool queued = M5.Speaker.playRaw(mono_buff, frames, actual_sample_rate, false, 1, 0, false);
+#else
             bool queued = M5.Speaker.playRaw((const int16_t *)wav_buff[rd], wav_buff_size[rd] * 2, actual_sample_rate, true, 1, 0, false);
+#endif
             if (queued) {
                 rd = (rd + 1) % WAV_BUFF_COUNT;
                 wav_count--;
@@ -1262,7 +1282,11 @@ void audio_play_task(void *args) {
 
 void vgm_engine_init() {
     auto spk_cfg = M5.Speaker.config();
+#if defined(IS_ATOMS3)
+    spk_cfg.sample_rate = 48000;
+#else
     spk_cfg.sample_rate = 44100;
+#endif
     spk_cfg.dma_buf_len = 512; 
     spk_cfg.dma_buf_count = 8;
     spk_cfg.task_pinned_core = 0; // DMAはCore 0
@@ -1282,7 +1306,7 @@ void vgm_engine_init() {
     if (M5.getBoard() == m5::board_t::board_M5Cardputer) {
         M5.Speaker.setVolume(128);
     } else if (M5.getBoard() == m5::board_t::board_M5AtomVoiceS3R || M5.getBoard() == m5::board_t::board_M5AtomS3R) {
-        M5.Speaker.setVolume(80); // 音割れ防止のためAtomS3R専用に音量を下げる
+        M5.Speaker.setVolume(80); // 48kHz化で音量が安定したため引き上げ
         // アンプ起動時のポップノイズを防ぐため、無音トーンを短く鳴らしてI2Sを安全にアクティブ化
         M5.Speaker.tone(0, 50);
     } else {
