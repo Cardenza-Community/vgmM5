@@ -21,7 +21,7 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 | **ステータス (Status)** | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | 🔮 予定 |
 | **VGM/VGZ 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **MDX 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
-| **内蔵フラッシュ (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
+| **内蔵フラッシュ (USB Drive)** | ✔️ | - |  - |  - | 🔮 |
 | **MicroSD** | - | ✔️ | ✔️ | ✔️  | 🔮 |
 | **オンラインモード** | - | ✔️ | - | - | 🔮 |
 | **キーボード操作** | - | ✔️ | - | - | - |
@@ -100,7 +100,7 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 | **Status** | ✔️ Supported | ✔️ Supported | ✔️ Supported | ✔️ Supported | 🔮 Future |
 | **VGM/VGZ Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **MDX Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
-| **Internal Flash (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
+| **Internal Flash (USB Drive)** | ✔️ | - |  - |  - |  🔮 |
 | **MicroSD** | - | ✔️ | ✔️ | ✔️ | 🔮 |
 | **Online Mode** | - | ✔️ | - |  - | 🔮 |
 | **Keyboard Control** | - | ✔️ | - | - | - |
