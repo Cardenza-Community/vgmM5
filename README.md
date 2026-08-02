@@ -1,4 +1,4 @@
-# vgmM5 (v0.97)
+# vgmM5 (v0.98)
 vgm and mdx player for M5Stack
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -16,15 +16,16 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 🎥 **動作風景 (Demonstration):** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
 #### 対応デバイスと機能 (Supported Devices & Features)
-| 機能 (Features) \ デバイス (Device) | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
-| :--- | :---: | :---: | :---: | :---: |
-| **ステータス (Status)** | ✔️ 対応済 | ✔️ 対応済 | 🔮 予定 | 🔮 予定 |
-| **VGM/VGZ 再生** | ✔️ | ✔️ | 🔮 | 🔮 |
-| **MDX 再生** | ✔️ | ✔️ | 🔮 | 🔮 |
-| **内蔵フラッシュ (USB Drive)** | ✔️ | - | 🔮 | 🔮 |
-| **MicroSD** | - | ✔️ | 🔮 | 🔮 |
-| **オンラインモード** | - | ✔️ | 🔮 | 🔮 |
-| **キーボード操作** | - | ✔️ | - | - |
+| 機能 (Features) \ デバイス (Device) | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + Audio Unit | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **ステータス (Status)** | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | 🔮 予定 |
+| **VGM/VGZ 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
+| **MDX 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
+| **内蔵フラッシュ (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
+| **MicroSD** | - | ✔️ | ✔️ | - | 🔮 |
+| **オンラインモード** | - | ✔️ | - | - | 🔮 |
+| **キーボード操作** | - | ✔️ | - | - | - |
+
 
 #### 対応音源チップ (Supported Sound Chips)
 | チップ名 (Chip) | ステータス (Status) |
@@ -45,7 +46,7 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 | **Namco C140** | ✔️ 対応済 (Supported |
 | **Namco C352** | ✔️ 対応済 (Supported) |
 
-※ いくつかのチップのサウンドテストを経た安定板（v0.97）です。
+※ いくつかのチップのサウンドテストを経た安定板（v0.98）です。ソースは近日更新します。
 ※ ステータスが「対応済」となっていても、もし再生時に音がおかしい・違和感があると感じた場合は、曲名とおかしい点を優しく申告していただければ対応いたします！
 
 ### 特徴
@@ -59,6 +60,7 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 
 - **M5Stack Cardputer用 シェアコード:** `Rvu8ybi4QoFenMNM`
 - **M5Stack Atom Echo S3R用 シェアコード:** `RFZVJ0k81yqvL6BK`
+- **M5Stack CoreS3用 シェアコード:** `0bmOieGu4PiD2yEZ`
 
 ---
 
@@ -92,21 +94,21 @@ AtomS3Rは画面表示を持たず、メインボタンで操作します。起�
 vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5Stack series.
 🎥 **Demonstration:** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
-#### Supported Devices & Features
-| Features \ Device | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Status** | ✔️ Supported | ✔️ Supported | 🔮 Future | 🔮 Future |
-| **VGM/VGZ Playback** | ✔️ | ✔️ | 🔮 | 🔮 |
-| **MDX Playback** | ✔️ | ✔️ | 🔮 | 🔮 |
-| **Internal Flash (USB Drive)** | ✔️ | - | 🔮 | 🔮 |
-| **MicroSD** | - | ✔️ | 🔮 | 🔮 |
-| **Online Mode** | - | ✔️ | 🔮 | 🔮 |
-| **Keyboard Control** | - | ✔️ | - | - |
+
+| Features \ Device | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + Audio Unit | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Status** | ✔️ Supported | ✔️ Supported | ✔️ Supported | ✔️ Supported | 🔮 Future |
+| **VGM/VGZ Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
+| **MDX Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
+| **Internal Flash (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
+| **MicroSD** | - | ✔️ | ✔️ | - | 🔮 |
+| **Online Mode** | - | ✔️ | - |  - | 🔮 |
+| **Keyboard Control** | - | ✔️ | - | - | - |
 
 #### Supported Sound Chips
 *(Please refer to the Supported Sound Chips table in the Japanese section above)*
 
-*Note: This is a stable version (v0.97) after sound tests on various chips.*
+*Note: This is a stable version (v0.98) after sound tests on various chips.*
 *Even if a chip is listed as "Supported," if you notice any strange sounds or something feels off during playback, please kindly report it (gently) with the song title and the issue, and I will address it!*
 
 ### Features
@@ -120,7 +122,7 @@ For a quick and easy start, you can flash the firmware directly to your device u
 
 - **M5Stack Cardputer Share Code:** `Rvu8ybi4QoFenMNM`
 - **M5Stack Atom Echo S3R Share Code:** `RFZVJ0k81yqvL6BK`
-
+- **M5Stack CoreS3 Share Code:** `0bmOieGu4PiD2yEZ`
 ---
 
 ### Controls
