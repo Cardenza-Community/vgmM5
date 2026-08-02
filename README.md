@@ -3,7 +3,7 @@ vgm and mdx player for M5Stack
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![Cardputer](card.jpg)
+![CoreS3](out.png)
 
 (English version follows below)
 
@@ -16,13 +16,13 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 🎥 **動作風景 (Demonstration):** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
 #### 対応デバイスと機能 (Supported Devices & Features)
-| 機能 (Features) \ デバイス (Device) | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + Audio Unit | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| 機能 (Features) \ デバイス (Device) | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + [Module Audio](https://docs.m5stack.com/ja/module/Module-Audio) | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **ステータス (Status)** | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | ✔️ 対応済 | 🔮 予定 |
 | **VGM/VGZ 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **MDX 再生** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **内蔵フラッシュ (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
-| **MicroSD** | - | ✔️ | ✔️ | - | 🔮 |
+| **MicroSD** | - | ✔️ | ✔️ | ✔️  | 🔮 |
 | **オンラインモード** | - | ✔️ | - | - | 🔮 |
 | **キーボード操作** | - | ✔️ | - | - | - |
 
@@ -95,13 +95,13 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 🎥 **Demonstration:** [https://x.com/layer812/status/2065461081305489671](https://x.com/layer812/status/2065461081305489671)
 
 
-| Features \ Device | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + Audio Unit | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
+| Features \ Device | M5Stack AtomS3R (Echo) | M5Stack Cardputer | M5Stack CoreS3 | + [Module Audio](https://docs.m5stack.com/ja/module/Module-Audio) | [M5 TAB5](https://docs.m5stack.com/ja/core/Tab5) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Status** | ✔️ Supported | ✔️ Supported | ✔️ Supported | ✔️ Supported | 🔮 Future |
 | **VGM/VGZ Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **MDX Playback** | ✔️ | ✔️ | ✔️ | ✔️ | 🔮 |
 | **Internal Flash (USB Drive)** | ✔️ | - | ✔️ | ✔️ | 🔮 |
-| **MicroSD** | - | ✔️ | ✔️ | - | 🔮 |
+| **MicroSD** | - | ✔️ | ✔️ | ✔️ | 🔮 |
 | **Online Mode** | - | ✔️ | - |  - | 🔮 |
 | **Keyboard Control** | - | ✔️ | - | - | - |
 
