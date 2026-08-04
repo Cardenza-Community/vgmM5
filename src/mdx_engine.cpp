@@ -15,6 +15,7 @@
 #include <FFat.h>
 #include <M5Unified.h>
 #include "mdx_engine.hpp"
+#include "sjis2utf8.h"
 #include "vgm_engine.h"   // 共有バッファ参照
 
 extern "C" {
@@ -386,11 +387,11 @@ static void mdx_gen_task(void *args) {
                 dc_prev_r = raw_in_r;
                 int32_t centered_r = (int32_t)(dc_state_r / 16384);
 
-                int32_t vl = centered_l / 4; 
+                int32_t vl = centered_l / 16;  // ★ 16で割って音圧を下げる（クリッピング防止）
                 if (vl >  32767) vl =  32767;
                 if (vl < -32768) vl = -32768;
 
-                int32_t vr = centered_r / 4; 
+                int32_t vr = centered_r / 16;  // ★ 16で割って音圧を下げる（クリッピング防止）
                 if (vr >  32767) vr =  32767;
                 if (vr < -32768) vr = -32768;
 
@@ -516,7 +517,13 @@ bool mdx_engine_is_playing(void) {
 
 const char *mdx_engine_get_title(void) {
     if (s_title[0] == '\0') return NULL;
+#if defined(IS_ATOMS3)
     return s_title;
+#else
+    static char s_utf8_title[512];
+    sjis_to_utf8(s_title, s_utf8_title, sizeof(s_utf8_title));
+    return s_utf8_title;
+#endif
 }
 
 const char *mdx_engine_get_error(void) {

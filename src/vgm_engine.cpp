@@ -1,5 +1,5 @@
 #include <Arduino.h>
-
+#include <Wire.h>
 
 #include <FFat.h>
 #include <SD.h>
@@ -9,6 +9,7 @@
 #include <esp_partition.h>
 #include <wear_levelling.h>
 #include <M5Unified.h>
+#include <driver/i2s.h>
 #include <atomic> // ★ C++11標準のロックフリー同期
 
 // ★ MDXエンジンとのバッファ共有：MDX再生中もaudio_play_taskが動作するようにする
@@ -89,6 +90,7 @@ uint32_t vgm_time_acc = 0;
 uint32_t vgmDataStart = 0;
 uint32_t vgmLoopStart = 0;
 bool vgm_has_loop = false;
+int vgm_loop_count = 0;
 
 uint8_t* vgm_data = nullptr;
 bool vgm_is_streaming = false;
@@ -101,7 +103,16 @@ uint32_t vgm_ptr = 0;
 uint32_t ym2612_pcm_offset = 0;
 
 char current_vgm_title[256] = {0};
+char current_vgm_system[256] = {0};
+char current_vgm_game[256] = {0};
+char current_vgm_author[256] = {0};
+char current_vgm_chip[256] = {0};
+
 const char* vgm_engine_get_title(void) { return current_vgm_title; }
+const char* vgm_engine_get_system(void) { return current_vgm_system; }
+const char* vgm_engine_get_game(void) { return current_vgm_game; }
+const char* vgm_engine_get_author(void) { return current_vgm_author; }
+const char* vgm_engine_get_chip(void) { return current_vgm_chip; }
 
 char vgm_last_error[128] = {0};
 const char* vgm_engine_get_error(void) { return vgm_last_error; }
@@ -372,7 +383,12 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     }
     
     vgm_data = nullptr;
-    if (true) {
+    
+    // PSRAMが利用可能な場合は、安全のため512KBを残して最大サイズを計算
+    size_t max_psram_size = ESP.getPsramSize() > 0 ? ESP.getFreePsram() - (512 * 1024) : 0;
+    
+    // 曲のサイズがPSRAMの空き容量より大きい場合、またはPSRAMが無い場合のみストリーミング(Swap)にする
+    if (uncompressed_size > max_psram_size || max_psram_size == 0) {
         vgm_is_streaming = true;
         vgm_swap_partition = nullptr;
         if (isVgz) {
@@ -488,6 +504,14 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
         vgm_stream_buf_start = 0;
         vgm_stream_buf_len = 0;
     } else {
+        // PSRAMに直接読み込む（SDカードとのSPI衝突を回避）
+        Serial.printf("[VGM] Loading %lu bytes directly into PSRAM (free: %lu)\n", uncompressed_size, max_psram_size);
+        vgm_data = (uint8_t*)ps_malloc(uncompressed_size);
+        if (!vgm_data) {
+            snprintf(vgm_last_error, sizeof(vgm_last_error), "OOM (PSRAM %lu bytes)", uncompressed_size);
+            f.close(); isPlaying = false; return false;
+        }
+        
         if (isVgz) {
             f.seek(0);
             int gzipOffset = skipGzipHeaderStream(f);
@@ -515,6 +539,7 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
         } else {
             f.read(vgm_data, vgm_file_size); f.close();
         }
+        Serial.printf("[VGM] PSRAM load complete, streaming=false\n");
     }
 
     uint8_t header[256];
@@ -534,47 +559,75 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
         isPlaying = false; return false;
     }
 
+    // --- GD3タグの読み取りとUTF-8変換 ---
     memset(current_vgm_title, 0, sizeof(current_vgm_title));
+    memset(current_vgm_system, 0, sizeof(current_vgm_system));
+    memset(current_vgm_game, 0, sizeof(current_vgm_game));
+    memset(current_vgm_author, 0, sizeof(current_vgm_author));
+    memset(current_vgm_chip, 0, sizeof(current_vgm_chip));
+
     uint32_t gd3_offset = header[0x14] | (header[0x15] << 8) | (header[0x16] << 16) | (header[0x17] << 24);
     if (gd3_offset != 0) {
         uint32_t abs_gd3 = gd3_offset + 0x14;
         if (abs_gd3 + 12 < vgm_file_size) {
             uint8_t gd3_sig[4];
             if (vgm_is_streaming) {
-                if (vgm_swap_partition) {
-                    esp_partition_read(vgm_swap_partition, abs_gd3, gd3_sig, 4);
-                } else {
-                    vgm_stream_file.seek(abs_gd3);
-                    vgm_stream_file.read(gd3_sig, 4);
-                }
+                if (vgm_swap_partition) esp_partition_read(vgm_swap_partition, abs_gd3, gd3_sig, 4);
+                else { vgm_stream_file.seek(abs_gd3); vgm_stream_file.read(gd3_sig, 4); }
             } else {
                 memcpy(gd3_sig, &vgm_data[abs_gd3], 4);
             }
             if (gd3_sig[0] == 'G' && gd3_sig[1] == 'd' && gd3_sig[2] == '3' && gd3_sig[3] == ' ') {
                 uint32_t str_offset = abs_gd3 + 12;
-                int out_idx = 0;
-                while (str_offset + 1 < vgm_file_size && out_idx < 255) {
-                    uint8_t c_buf[2];
-                    if (vgm_is_streaming) {
-                        if (vgm_swap_partition) {
-                            esp_partition_read(vgm_swap_partition, str_offset, c_buf, 2);
+                // スタックオーバーフロー回避のためPSRAMに確保
+                char (*gd3_strings)[256] = (char (*)[256])ps_malloc(11 * 256);
+                if (gd3_strings) {
+                    memset(gd3_strings, 0, 11 * 256);
+                
+                for (int str_idx = 0; str_idx < 11; str_idx++) {
+                    int out_idx = 0;
+                    while (str_offset + 1 < vgm_file_size && out_idx < 250) {
+                        uint8_t c_buf[2];
+                        if (vgm_is_streaming) {
+                            if (vgm_swap_partition) esp_partition_read(vgm_swap_partition, str_offset, c_buf, 2);
+                            else { vgm_stream_file.seek(str_offset); vgm_stream_file.read(c_buf, 2); }
                         } else {
-                            vgm_stream_file.seek(str_offset);
-                            vgm_stream_file.read(c_buf, 2);
+                            c_buf[0] = vgm_data[str_offset];
+                            c_buf[1] = vgm_data[str_offset+1];
                         }
-                    } else {
-                        c_buf[0] = vgm_data[str_offset];
-                        c_buf[1] = vgm_data[str_offset+1];
+                        str_offset += 2;
+                        
+                        uint16_t c = c_buf[0] | (c_buf[1] << 8);
+                        if (c == 0) break;
+                        
+                        // UTF-16LE から UTF-8 へ変換（日本語対応）
+                        if (c < 0x0080) {
+                            gd3_strings[str_idx][out_idx++] = (char)c;
+                        } else if (c < 0x0800) {
+                            gd3_strings[str_idx][out_idx++] = 0xC0 | (c >> 6);
+                            gd3_strings[str_idx][out_idx++] = 0x80 | (c & 0x3F);
+                        } else {
+                            gd3_strings[str_idx][out_idx++] = 0xE0 | (c >> 12);
+                            gd3_strings[str_idx][out_idx++] = 0x80 | ((c >> 6) & 0x3F);
+                            gd3_strings[str_idx][out_idx++] = 0x80 | (c & 0x3F);
+                        }
                     }
-                    uint16_t c = c_buf[0] | (c_buf[1] << 8);
-                    if (c == 0) break;
-                    current_vgm_title[out_idx++] = (char)(c & 0xFF);
-                    str_offset += 2;
+                    if (str_offset >= vgm_file_size) break;
+                }
+                
+                // 日本語名があれば優先し、なければ英語名を使用
+                if (strlen(gd3_strings[1]) > 0) strncpy(current_vgm_title,  gd3_strings[1], 255); else strncpy(current_vgm_title,  gd3_strings[0], 255);
+                if (strlen(gd3_strings[3]) > 0) strncpy(current_vgm_game,   gd3_strings[3], 255); else strncpy(current_vgm_game,   gd3_strings[2], 255);
+                if (strlen(gd3_strings[5]) > 0) strncpy(current_vgm_system, gd3_strings[5], 255); else strncpy(current_vgm_system, gd3_strings[4], 255);
+                if (strlen(gd3_strings[7]) > 0) strncpy(current_vgm_author, gd3_strings[7], 255); else strncpy(current_vgm_author, gd3_strings[6], 255);
+                    
+                free(gd3_strings); // 使い終わったらPSRAMを解放
                 }
             }
         }
     }
-
+    // ------------------------------------------
+    
     uint32_t dataOffset = header[0x34] | (header[0x35] << 8) | (header[0x36] << 16) | (header[0x37] << 24);
     vgmDataStart = (dataOffset == 0) ? 0x40 : (0x34 + dataOffset);
     uint32_t loopOffset = header[0x1C] | (header[0x1D] << 8) | (header[0x1E] << 16) | (header[0x1F] << 24);
@@ -610,15 +663,48 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     uint32_t vgm_c140_clock    = (vgm_version >= 0x151 && vgmDataStart > 0xAB) ? (header[0xA8] | (header[0xA9] << 8) | (header[0xAA] << 16) | (header[0xAB] << 24)) : 0;
     uint32_t vgm_c352_clock    = (vgm_version >= 0x151 && vgmDataStart > 0xDF) ? (header[0xDC] | (header[0xDD] << 8) | (header[0xDE] << 16) | (header[0xDF] << 24)) : 0;
 
+    // --- 搭載サウンドチップ文字列の生成 ---
+    {
+        String chip_str = "";
+        auto add_chip = [&](uint32_t clk, const char* name) {
+            if (clk > 0) {
+                if (chip_str.length() > 0) chip_str += " + ";
+                chip_str += name;
+            }
+        };
+        add_chip(vgm_sn_clock, "SN76489");
+        add_chip(vgm_ym2413_clock, "YM2413");
+        add_chip(vgm_ym2612_clock, "YM2612");
+        add_chip(vgm_ym2151_clock, "YM2151");
+        add_chip(vgm_segapcm_clock, "SegaPCM");
+        add_chip(vgm_ym2203_clock, "YM2203");
+        add_chip(vgm_ym2608_clock, "YM2608");
+        add_chip(vgm_ym2610_clock, "YM2610");
+        add_chip(vgm_ym3812_clock, "YM3812");
+        add_chip(vgm_ay8910_clock, "AY8910");
+        add_chip(vgm_msm6258_clock, "MSM6258");
+        add_chip(vgm_oki_clock, "OKIM6258");
+        add_chip(vgm_scc_clock, "K051649");
+        add_chip(vgm_c140_clock, "C140");
+        add_chip(vgm_c352_clock, "C352");
+        
+        uint32_t vgm_ymf262_clock  = (vgm_version >= 0x151 && vgmDataStart > 0x5B) ? (header[0x58] | (header[0x59] << 8) | (header[0x5A] << 16) | (header[0x5B] << 24)) : 0;
+        add_chip(vgm_ymf262_clock, "YMF262");
+        
+        if (chip_str == "") chip_str = "Unknown Chip";
+        strncpy(current_vgm_chip, chip_str.c_str(), 255);
+    }
+    // ------------------------------------------
+
     if (vgm_ym2612_clock != 0 || vgm_ym2151_clock != 0 || vgm_ym2610_clock != 0 || vgm_ym2203_clock != 0 || vgm_ym2608_clock != 0 || vgm_ym3812_clock != 0 || vgm_ym2413_clock != 0) {
         uint32_t fm_clock = 0;
-        if      (vgm_ym2612_clock != 0) { chip_type = CHIP_YM2612; fm_clock = vgm_ym2612_clock; }
-        else if (vgm_ym2608_clock != 0) { chip_type = CHIP_YM2608; fm_clock = vgm_ym2608_clock; }
-        else if (vgm_ym2610_clock != 0) { chip_type = CHIP_YM2610; fm_clock = vgm_ym2610_clock; }
-        else if (vgm_ym2203_clock != 0) { chip_type = CHIP_YM2203; fm_clock = vgm_ym2203_clock; }
-        else if (vgm_ym3812_clock != 0) { chip_type = CHIP_YM3812; fm_clock = vgm_ym3812_clock; }
-        else if (vgm_ym2413_clock != 0) { chip_type = CHIP_YM2413; fm_clock = vgm_ym2413_clock; }
-        else                            { chip_type = CHIP_YM2151; fm_clock = vgm_ym2151_clock; }
+        if      (vgm_ym2612_clock != 0) { chip_type = CHIP_YM2612; fm_clock = vgm_ym2612_clock & 0x3FFFFFFF; }
+        else if (vgm_ym2608_clock != 0) { chip_type = CHIP_YM2608; fm_clock = vgm_ym2608_clock & 0x3FFFFFFF; }
+        else if (vgm_ym2610_clock != 0) { chip_type = CHIP_YM2610; fm_clock = vgm_ym2610_clock & 0x3FFFFFFF; }
+        else if (vgm_ym2203_clock != 0) { chip_type = CHIP_YM2203; fm_clock = vgm_ym2203_clock & 0x3FFFFFFF; }
+        else if (vgm_ym3812_clock != 0) { chip_type = CHIP_YM3812; fm_clock = vgm_ym3812_clock & 0x3FFFFFFF; }
+        else if (vgm_ym2413_clock != 0) { chip_type = CHIP_YM2413; fm_clock = vgm_ym2413_clock & 0x3FFFFFFF; }
+        else                            { chip_type = CHIP_YM2151; fm_clock = vgm_ym2151_clock & 0x3FFFFFFF; }
         fm_engine_init(&g_fm_engine, actual_sample_rate, fm_clock, chip_type);
         pcm_engine_opn_init(&g_pcm_engine, fm_clock, chip_type);
         
@@ -689,8 +775,8 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     if (vgm_msm6258_clock != 0 || vgm_oki_clock != 0 || vgm_segapcm_clock != 0 || vgm_ym2612_clock != 0 || vgm_ym2608_clock != 0 || vgm_ym2610_clock != 0 || vgm_c140_clock != 0 || vgm_c352_clock != 0) {
         active_chips[active_chip_count++] = &pcm_wrapper;
         active_channel_count += 1;
-        if (vgm_msm6258_clock != 0) pcm_engine_set_msm6258_clock(&g_pcm_engine, vgm_msm6258_clock);
-        if (vgm_oki_clock != 0)     pcm_engine_set_oki_clock(&g_pcm_engine, vgm_oki_clock);
+        if (vgm_msm6258_clock != 0) pcm_engine_set_msm6258_clock(&g_pcm_engine, vgm_msm6258_clock & 0x3FFFFFFF);
+        if (vgm_oki_clock != 0)     pcm_engine_set_oki_clock(&g_pcm_engine, vgm_oki_clock & 0x3FFFFFFF);
         if (vgm_segapcm_clock != 0) pcm_engine_segapcm_init(&g_pcm_engine, vgm_segapcm_clock & 0x3FFFFFFF, vgm_spcm_intf);
         if (vgm_c140_clock != 0) {
             uint8_t c140_bank_type = (vgm_c140_clock >> 31) & 1; // 0 = System 2, 1 = System 21
@@ -712,6 +798,7 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
 
     waitSamples = 8820; vgm_time_acc = 0; ym2612_pcm_offset = 0;
     sn76489_writes = 0;
+    vgm_loop_count = 0;
     rd = 0; wd = 0; wav_count = 0;
     
     // ==========================================
@@ -987,7 +1074,9 @@ void processVGM() {
             case 0x64: vgm_ptr += 3; break;        // Wait override: skip 3-byte argument
             case 0x66: {
                 if (!vgm_has_loop) { isPlaying = false; }
+                else if (vgm_loop_count >= 2) { isPlaying = false; }
                 else { 
+                    vgm_loop_count++;
                     for (int i = 0; i < TOTAL_OPS; i++) {
                         if (g_fm_engine.ops[i].rr <= 3) {
                             g_fm_engine.ops[i].env_state = EG_OFF;
@@ -1143,9 +1232,9 @@ void IRAM_ATTR processAudioBlock() {
         }
 
         // グローバルに計算済みのチップ数で割る
-        // （各音源の出力が非常に大きく合算でクリップするため、さらに3で割ってヘッドルームを確保し音割れを防ぐ）
-        mix_l /= (global_chip_count * 3);
-        mix_r /= (global_chip_count * 3);
+        // （YM2612等は最大出力が20万を超えるため、8で割って音割れとメロディ消失を防ぐ）
+        mix_l /= (global_chip_count * 8);
+        mix_r /= (global_chip_count * 8);
 
         int32_t in_l = mix_l;
         int32_t in_r = mix_r;
@@ -1217,25 +1306,39 @@ if (M5.getBoard() == m5::board_t::board_M5AtomS3 || M5.getBoard() == m5::board_t
 // ────────────────────────────────────────────────────────────────────────
 // Core 1：波形生成（セマフォ要求駆動型・1024バッファの高速連射）
 // ────────────────────────────────────────────────────────────────────────
+
+
+
 void audio_generate_task(void *args) {
     while (true) {
-        // 再生開始のシグナルを待つ
-        xSemaphoreTake(xSemaphore, portMAX_DELAY); 
+        xSemaphoreTake(xSemaphore, portMAX_DELAY);
+
+        uint32_t consecutive_blocks = 0;
 
         while (isPlaying) {
-            // バッファに空きがある場合は音声を生成
             if (wav_count < (WAV_BUFF_COUNT - 4)) {
-                processAudioBlock(); 
-                // タスク独占防止のための1ms休止
-                taskYIELD(); 
+                processAudioBlock();
+                if (chip_type == CHIP_YM2151 || chip_type == CHIP_YM2608) {
+                    consecutive_blocks++;
+                    if (consecutive_blocks >= 4) {
+                        vTaskDelay(1);
+                        consecutive_blocks = 0;
+                    } else {
+                        taskYIELD();
+                    }
+                } else {
+                    taskYIELD();
+                }
             } else {
-                // ★修正点：バッファが満杯の場合は break でループを抜けるのではなく、
-                // I2S（スピーカー）が音声を消費してバッファが空くまで待機する
-                vTaskDelay(pdMS_TO_TICKS(5)); 
+                break;
             }
         }
     }
 }
+
+
+// 前方宣言
+static bool g_es8388_detected = false;
 
 // ────────────────────────────────────────────────────────────────────────
 // Core 0：I2S（DMA）転送 ＆ 減衰検知時のセマフォ発行
@@ -1247,19 +1350,22 @@ void audio_play_task(void *args) {
             prebuffering = false;
         }
         if (any_playing && wav_count > 0 && !prebuffering) {
-            // VGM / MDX どちらのデータでもバッファを消費して再生する
 #if defined(IS_ATOMS3)
-            // AtomS3R環境での「1オクターブ下がる(半速再生になる)」現象への対策
-            // M5Unifiedのバグを回避するため、自前でMonoにダウンミックスしてから渡す
             static int16_t mono_buff[512];
             int frames = wav_buff_size[rd];
             for (int i = 0; i < frames; i++) {
-                // 48kHz化で音量が安定したため、/2に戻して正常な音量を回復
                 mono_buff[i] = (wav_buff[rd][i * 2] + wav_buff[rd][i * 2 + 1]) / 2;
             }
             bool queued = M5.Speaker.playRaw(mono_buff, frames, actual_sample_rate, false, 1, 0, false);
 #else
-            bool queued = M5.Speaker.playRaw((const int16_t *)wav_buff[rd], wav_buff_size[rd] * 2, actual_sample_rate, true, 1, 0, false);
+            bool queued = false;
+            if (g_es8388_detected) {
+                size_t bytes_written = 0;
+                i2s_write(I2S_NUM_0, (const void *)wav_buff[rd], wav_buff_size[rd] * 4, &bytes_written, portMAX_DELAY);
+                queued = (bytes_written > 0);
+            } else {
+                queued = M5.Speaker.playRaw((const int16_t *)wav_buff[rd], wav_buff_size[rd] * 2, actual_sample_rate, true, 1, 0, false);
+            }
 #endif
             if (queued) {
                 rd = (rd + 1) % WAV_BUFF_COUNT;
@@ -1272,15 +1378,122 @@ void audio_play_task(void *args) {
                 vTaskDelay(1);
             }
         } else {
-            // 無音を流してアンプの電源ON/OFF（プツ音）を防ぐ
             static const int16_t idle_silence[512 * 2] = {0};
-            M5.Speaker.playRaw(idle_silence, 512 * 2, actual_sample_rate, true, 1, 0, false);
+            if (g_es8388_detected) {
+                size_t bytes_written = 0;
+                i2s_write(I2S_NUM_0, (const void *)idle_silence, sizeof(idle_silence), &bytes_written, portMAX_DELAY);
+            } else {
+                M5.Speaker.playRaw(idle_silence, 512 * 2, actual_sample_rate, true, 1, 0, false);
+            }
             vTaskDelay(1);
         }
     }
 }
 
+// ============================================================================
+// ES8388 (M5Stack Module-Audio) 初期化
+// ============================================================================
 void vgm_engine_init() {
+    delay(10);
+    
+    M5.Speaker.setVolume(0);
+    
+#if defined(IS_CORES3)
+    M5.Speaker.end();
+    gpio_reset_pin((gpio_num_t)34);
+    gpio_reset_pin((gpio_num_t)33);
+
+    i2s_driver_uninstall(I2S_NUM_0);
+    
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+        .sample_rate = 44100,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 6,
+        .dma_buf_len = 160,
+        .use_apll = false,
+        .tx_desc_auto_clear = true,
+        .fixed_mclk = 0,
+        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+    };
+    
+    i2s_pin_config_t pin_config = {
+        .mck_io_num = 7,
+        .bck_io_num = 0,
+        .ws_io_num = 6,
+        .data_out_num = 13,
+        .data_in_num = I2S_PIN_NO_CHANGE
+    };
+    
+    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &pin_config);
+    delay(50);
+    
+    uint8_t addr = 0x10;
+    if (!M5.In_I2C.writeRegister8(0x10, 0x00, 0x00, 400000)) {
+        if (!M5.In_I2C.writeRegister8(0x11, 0x00, 0x00, 400000)) {
+            g_es8388_detected = false;
+            goto skip_es8388_init;
+        } else {
+            addr = 0x11;
+        }
+    }
+    
+    {
+        auto write_reg = [&](uint8_t reg, uint8_t val) { M5.In_I2C.writeRegister8(addr, reg, val, 400000); };
+
+        write_reg(0x08, 0x40);
+        write_reg(0x02, 0xFF);
+        write_reg(0x2B, 0x80);
+        write_reg(0x00, 0x05);
+        write_reg(0x01, 0x40);
+        write_reg(0x04, 0x3F);
+        write_reg(0x17, 0x18);
+        write_reg(0x18, 0x02);
+        write_reg(0x19, 0x00);
+        write_reg(0x1A, 0x05);
+        write_reg(0x1B, 0x05);
+        write_reg(0x26, 0x00);
+        write_reg(0x27, 0x90);
+        write_reg(0x28, 0x38);
+        write_reg(0x29, 0x38);
+        write_reg(0x2A, 0x90);
+        write_reg(0x2B, 0x80);
+        write_reg(0x2E, 0x18);
+        write_reg(0x2F, 0x18);
+        write_reg(0x30, 0x18);
+        write_reg(0x31, 0x18);
+        write_reg(0x02, 0x00);
+
+        M5.In_I2C.writeRegister8(0x33, 0x10, 0x01, 400000);
+        M5.In_I2C.writeRegister8(0x33, 0x30, 100, 400000);
+        uint8_t color_green[3] = {0x00, 0xFF, 0x00};
+        M5.In_I2C.writeRegister(0x33, 0x40, color_green, 3, 400000);
+        
+        M5.In_I2C.bitOff(0x58, 0x02, 0x04, 400000);
+        
+        g_es8388_detected = true;
+    }
+
+skip_es8388_init:
+    // ES8388未接続時にCoreS3内蔵スピーカーを再起動
+    if (!g_es8388_detected) {
+        auto spk_cfg = M5.Speaker.config();
+        spk_cfg.sample_rate = 44100;
+        M5.Speaker.config(spk_cfg);
+        M5.Speaker.begin();
+        
+        // 内蔵スピーカー用に十分な初期ボリュームを設定 (0〜255)
+        M5.Speaker.setVolume(128);
+    }
+#else
+    // CoreS3以外のボードではES8388関連の初期化を完全にスキップ
+    g_es8388_detected = false;
+
+    // ★ 以前のM5.Speaker初期化処理を復元（AtomS3等のため）
     auto spk_cfg = M5.Speaker.config();
 #if defined(IS_ATOMS3)
     spk_cfg.sample_rate = 48000;
@@ -1289,38 +1502,38 @@ void vgm_engine_init() {
 #endif
     spk_cfg.dma_buf_len = 512; 
     spk_cfg.dma_buf_count = 8;
-    spk_cfg.task_pinned_core = 0; // DMAはCore 0
-    spk_cfg.task_priority = configMAX_PRIORITIES - 1; // 内部I2Sタスクの優先度を最大化
+    spk_cfg.task_pinned_core = 0; 
+    spk_cfg.task_priority = configMAX_PRIORITIES - 1;
     
-    // board認識によるスピーカーピンの動的設定
     if (M5.getBoard() == m5::board_t::board_M5AtomS3) {
-        // AtomS3 + Atomic SPK 用のI2Sピン設定 (BCLK=5, WS/LRCK=39, DOUT=38)
         spk_cfg.pin_bck = 5;
         spk_cfg.pin_ws = 39;
         spk_cfg.pin_data_out = 38;
     }
+    else if (M5.getBoard() == m5::board_t::board_M5AtomVoiceS3R) {
+        // ATOM Voice S3R 内蔵スピーカー用のI2Sピン設定 (BCK=17, WS=3, DOUT=48)
+        spk_cfg.pin_bck = 17;
+        spk_cfg.pin_ws = 3;
+        spk_cfg.pin_data_out = 48;
+    }
     
     M5.Speaker.config(spk_cfg);
     M5.Speaker.begin();
-    
-    if (M5.getBoard() == m5::board_t::board_M5Cardputer) {
-        M5.Speaker.setVolume(128);
-    } else if (M5.getBoard() == m5::board_t::board_M5AtomVoiceS3R || M5.getBoard() == m5::board_t::board_M5AtomS3R) {
-        M5.Speaker.setVolume(80); // 48kHz化で音量が安定したため引き上げ
-        // アンプ起動時のポップノイズを防ぐため、無音トーンを短く鳴らしてI2Sを安全にアクティブ化
-        M5.Speaker.tone(0, 50);
-    } else {
-        M5.Speaker.setVolume(48); // AtomS3 + 外部アンプ等は音量を絞る
-    }
-    
-    
-    xSemaphore = xSemaphoreCreateBinary(); 
+#endif
 
-    // DSP生成タスクをCore 0に移動し、メインループ(Core 1)のM5.update()による遅延から完全に切り離す
-    // 優先度は2に設定
-    xTaskCreatePinnedToCore(audio_generate_task, "AudioGenTask", 8192, NULL, 5, &playTaskHandle, 1);
+    // ボード固有のデフォルトボリューム設定
+#if defined(IS_CARDPUTER)
+    M5.Speaker.setVolume(168);
+#elif defined(IS_ATOMS3)
+    M5.Speaker.setVolume(80);
+    M5.Speaker.tone(0, 50);
+#else
+    M5.Speaker.setVolume(48);
+#endif
     
-    // 再生タスクはCore 0の高優先度
+    // タスク起動
+    xSemaphore = xSemaphoreCreateBinary();
+    xTaskCreatePinnedToCore(audio_generate_task, "AudioGenTask", 8192, NULL, 5, &playTaskHandle, 1);
     xTaskCreatePinnedToCore(audio_play_task, "AudioPlayTask", 4096, NULL, 4, NULL, 0);
 
     isPlaying = false;
@@ -1331,5 +1544,28 @@ bool vgm_engine_is_playing(void) {
 }
 
 void vgm_engine_set_volume(uint8_t vol) {
-    M5.Speaker.setVolume(vol);
+    if (g_es8388_detected) {
+        // M5Stackのボリューム(0〜255)を ES8388のハードウェアボリューム(0〜0x21)に変換
+        uint8_t reg = 0;
+        if (vol > 0) {
+            reg = (vol * 33) / 255; // 0x21(最大) = 33
+            if (reg > 0x21) reg = 0x21;
+            if (reg == 0 && vol > 0) reg = 1; // 最小でもミュートにはしない
+        }
+        
+        M5.In_I2C.writeRegister8(0x10, 0x2E, reg, 400000);
+        M5.In_I2C.writeRegister8(0x10, 0x2F, reg, 400000);
+        M5.In_I2C.writeRegister8(0x10, 0x30, reg, 400000);
+        M5.In_I2C.writeRegister8(0x10, 0x31, reg, 400000);
+        M5.In_I2C.writeRegister8(0x11, 0x2E, reg, 400000);
+        M5.In_I2C.writeRegister8(0x11, 0x2F, reg, 400000);
+        M5.In_I2C.writeRegister8(0x11, 0x30, reg, 400000);
+        M5.In_I2C.writeRegister8(0x11, 0x31, reg, 400000);
+        
+        // ★重要：外部モジュール接続時は M5.Speaker.setVolume(vol) を「絶対に呼ばない」
+        // （呼ぶとM5Unifiedが内蔵スピーカーの電源を勝手に再投入してしまうため）
+    } else {
+        // モジュールが無い場合のみ内蔵スピーカーの音量を変更する
+        M5.Speaker.setVolume(vol);
+    }
 }

@@ -232,6 +232,7 @@ typedef struct {
     uint8_t adpcma_tl;
     
     uint32_t clock;
+    uint8_t chip_type;
 } OPN_PCM_Matrix;
 
 // ─────────────────────────────────────────

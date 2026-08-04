@@ -18,5 +18,5 @@ test*.c
 *.txt
 mame_segapcm.cpp
 segapcm.cpp
-
+GEMINI.md
 rewrite.sh

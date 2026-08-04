@@ -8,6 +8,10 @@ void vgm_engine_toggle_pause(void);
 bool vgm_engine_is_playing(void);
 void vgm_engine_set_volume(uint8_t vol);
 const char* vgm_engine_get_title(void);
+const char* vgm_engine_get_system(void);
+const char* vgm_engine_get_game(void);
+const char* vgm_engine_get_author(void);
+const char* vgm_engine_get_chip(void);
 const char* vgm_engine_get_error(void);
 
 // ─────────────────────────────────────────

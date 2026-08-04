@@ -67,31 +67,6 @@ typedef struct {
 
 } OperatorState;
 
-// PSG Structure
-typedef struct {
-    uint32_t tone_period[3];
-    uint32_t tone_counter[3];
-    uint8_t  tone_out[3];
-    uint8_t  tone_disable[3];
-    
-    uint32_t noise_period;
-    uint32_t noise_counter;
-    uint32_t noise_lfsr;
-    uint8_t  noise_disable[3];
-    
-    uint32_t env_period;
-    uint32_t env_counter;
-    uint8_t  env_shape;
-    uint8_t  env_vol;
-    uint8_t  env_ptr;
-    
-    uint8_t  volume[3]; // 0-15 or 16 (envelope)
-    uint8_t  is_envelope[3];
-    
-    int32_t  pan_l[3];
-    int32_t  pan_r[3];
-} PSG_StateMatrix;
-
 typedef struct {
     uint8_t pan_l[FM_CHANNELS];
     uint8_t pan_r[FM_CHANNELS];
@@ -133,6 +108,15 @@ typedef struct {
     uint32_t sample_rate;
     uint32_t clock;
     uint8_t  chip_type; 
+    uint8_t  dac_enable;         // YM2612 DAC enable flag (port 0x2B)
+
+    // YM2612 native/output clock ratio in unsigned 16.16 format
+    uint32_t ym2612_clock_ratio_q16;
+    uint32_t ym2203_pg_divider;
+    uint32_t ym2203_clock_ratio_q16;
+
+
+    uint32_t output_tick_counter; // generic output tick counter (for envelope timing)
 
     // Hardware Latches (used for routing to OperatorState)
     uint16_t f_number[FM_CHANNELS];
@@ -148,7 +132,7 @@ typedef struct {
     // Global parameters
     uint32_t opl_drum_phase[6];
     uint32_t opl_drum_step[6];
-    uint64_t fchip_step; // ★ Hardware frequency wrap-around step for anti-aliasing
+//    uint64_t fchip_step; // ★ Hardware frequency wrap-around step for anti-aliasing
     
     // ★ 事前計算ファクタ (double撲滅 & 高速化)
     float phase_step_factor;
@@ -163,8 +147,6 @@ typedef struct {
     
     int32_t prev_l;
     int32_t prev_r;
-    
-    PSG_StateMatrix psg;
 } FMSoundEngine;
 
 
@@ -178,8 +160,6 @@ extern "C" {
 
 void fm_engine_init(FMSoundEngine *engine, uint32_t sample_rate, uint32_t clock, uint8_t chip_type);
 void fm_engine_tick(FMSoundEngine *engine, int32_t *out_l, int32_t *out_r);
-void psg_engine_tick(PSG_StateMatrix *psg, int32_t *out_mix);
-void psg_engine_write(PSG_StateMatrix *psg, uint8_t reg, uint8_t val);
 void fm_engine_register_write(FMSoundEngine *engine, uint16_t addr, uint8_t data);
 void fm_engine_write_ym2612(FMSoundEngine *engine, uint8_t port, uint8_t addr, uint8_t data);
 void fm_engine_write_opl(FMSoundEngine *engine, uint8_t addr, uint8_t data);

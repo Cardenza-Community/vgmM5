@@ -16,7 +16,8 @@ void ssg_engine_init(SSGSoundEngine *engine, uint32_t sample_rate, uint32_t cloc
     engine->rng = 1; // ノイズ用LFSR初期値
 
     // ボリュームテーブル作成 (対数カーブ)
-    const double MAX_VOL = 12000.0;
+//    const double MAX_VOL = 36000.0; // FM音源とのバランスを取るため音量を引き上げ
+    const double MAX_VOL = 54000.0; // FM音源とのバランスを取るため音量を引き上げ
     for (int i = 0; i < 16; i++) {
         if (i == 0) engine->vol_table[i] = 0;
         else engine->vol_table[i] = (int32_t)(MAX_VOL * pow(10.0, (i - 15) * 3.0 / 20.0));

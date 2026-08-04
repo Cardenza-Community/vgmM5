@@ -572,6 +572,7 @@ void mdx_driver_track_tick(struct mdx_driver *driver, int track_num) {
 
 	while(track->ticks_remaining <= 0 && !track->ended) {
 		mdx_driver_track_advance(driver, track_num);
+		if(track->waiting) break;
 	}
 }
 

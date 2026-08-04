@@ -62,13 +62,9 @@ static void init_tables() {
         LFO_AM_TAB[0][p] = 255 - p;
         LFO_PM_TAB[1][p] = (p < 128) ? 127 : -128;
         LFO_AM_TAB[1][p] = (p < 128) ? 255 : 0;
-        if (p < 64) {
-            LFO_PM_TAB[2][p] = p * 2;
-        } else if (p < 192) {
-            LFO_PM_TAB[2][p] = 127 - (p - 64) * 2;
-        } else {
-            LFO_PM_TAB[2][p] = -127 + (p - 192) * 2;
-        }
+        if (p < 64) LFO_PM_TAB[2][p] = p * 2;
+        else if (p < 192) LFO_PM_TAB[2][p] = 128 - (p - 64) * 2;
+        else LFO_PM_TAB[2][p] = -128 + (p - 192) * 2;
         LFO_AM_TAB[2][p] = (p < 128) ? (255 - p * 2) : ((p - 128) * 2);
         LFO_PM_TAB[3][p] = (int32_t)((((uint32_t)p * 1103515245U + 12345U) >> 16) & 255) - 128;
         LFO_AM_TAB[3][p] = (((uint32_t)p * 1103515245U + 12345U) >> 16) & 255;

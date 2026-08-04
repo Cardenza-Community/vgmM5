@@ -58,13 +58,24 @@ vgmM5 は M5Stackシリーズで動作するVGM/VGZおよびMDX(MXDRV)ファイ�
 ### インストール方法 (M5 Burner)
 手軽に試す場合は、M5 Burnerから以下のシェアコードでファームウェアを直接書き込めます。
 
-- **M5Stack Cardputer用 シェアコード:** `Rvu8ybi4QoFenMNM`
-- **M5Stack Atom Echo S3R用 シェアコード:** `RFZVJ0k81yqvL6BK`
-- **M5Stack CoreS3用 シェアコード:** `0bmOieGu4PiD2yEZ`
+- **M5Stack CoreS3用 シェアコード:** `HRmuTxOVO7iUxfeo`
+- **M5Stack Cardputer用 シェアコード:** `KxVPdM380FWTyMmC`
+- **M5Stack Atom Echo S3R用 シェアコード:** `zoSd8neRRq7ZQFjB`
 
 ---
 
 ### 操作方法
+
+#### 📺 M5Stack CoreS3
+CoreS3版はタッチパネル操作に対応しています。外部モジュール [Module-Audio](https://docs.m5stack.com/ja/module/Module-Audio) を接続しての高音質再生もサポートしています。
+
+> [!IMPORTANT]
+> **Module-Audio を使用する場合、正常に動作させるためにモジュール内部のDIPスイッチを「B」に切り替えてから接続してください。**
+
+**基本操作 (タッチパネル):**
+- **ファイルリストのタップ**: フォルダ移動、ファイル選択・再生
+- **画面下部のアイコン**: (左から) ブラウザに戻る / 前の曲 / 再生・停止 / 次の曲
+- **再生中サムネイルのタップ**: 上半分で音量アップ、下半分で音量ダウン
 
 #### 💻 M5Stack Cardputer
 Cardputer版はMicroSDカード内のファイル再生に加え、オンラインモードでの再生に対応しています。
@@ -120,12 +131,23 @@ vgmM5 is a VGM/VGZ and MDX (X68000) file player designed specifically for the M5
 ### Installation (via M5 Burner)
 For a quick and easy start, you can flash the firmware directly to your device using M5 Burner with the following share codes:
 
-- **M5Stack Cardputer Share Code:** `Rvu8ybi4QoFenMNM`
-- **M5Stack Atom Echo S3R Share Code:** `RFZVJ0k81yqvL6BK`
-- **M5Stack CoreS3 Share Code:** `0bmOieGu4PiD2yEZ`
+- **M5Stack CoreS3 Share Code:** `HRmuTxOVO7iUxfeo`
+- **M5Stack Cardputer Share Code:** `KxVPdM380FWTyMmC`
+- **M5Stack Atom Echo S3R Share Code:** `zoSd8neRRq7ZQFjB`
 ---
 
 ### Controls
+
+#### 📺 M5Stack CoreS3
+The CoreS3 version supports touch panel controls. It also supports high-quality audio output via an external [Module-Audio](https://docs.m5stack.com/ja/module/Module-Audio).
+
+> [!IMPORTANT]
+> **When using the Module-Audio, you must switch its internal DIP switch to "B" before connecting it for proper operation.**
+
+**Basic Controls (Touch Panel):**
+- **Tap File List**: Navigate folders, select/play files
+- **Tap Bottom Icons**: (From left to right) Back to Browser / Previous Track / Play/Stop / Next Track
+- **Tap Thumbnail Image**: Top half for Volume Up, Bottom half for Volume Down
 
 #### 💻 M5Stack Cardputer
 The Cardputer version plays files directly from a MicroSD card and supports streaming via Online Mode.
