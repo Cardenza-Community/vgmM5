@@ -385,7 +385,11 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     vgm_data = nullptr;
     
     // PSRAMが利用可能な場合は、安全のため512KBを残して最大サイズを計算
+    #ifdef CARDENZA
+    size_t max_psram_size = 0; // Stream SD; production Cardenza has no PSRAM.
+#else
     size_t max_psram_size = ESP.getPsramSize() > 0 ? ESP.getFreePsram() - (512 * 1024) : 0;
+#endif
     
     // 曲のサイズがPSRAMの空き容量より大きい場合、またはPSRAMが無い場合のみストリーミング(Swap)にする
     if (uncompressed_size > max_psram_size || max_psram_size == 0) {
@@ -580,7 +584,11 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
             if (gd3_sig[0] == 'G' && gd3_sig[1] == 'd' && gd3_sig[2] == '3' && gd3_sig[3] == ' ') {
                 uint32_t str_offset = abs_gd3 + 12;
                 // スタックオーバーフロー回避のためPSRAMに確保
+                #ifdef CARDENZA
+                char (*gd3_strings)[256] = (char (*)[256])heap_caps_malloc(11 * 256, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#else
                 char (*gd3_strings)[256] = (char (*)[256])ps_malloc(11 * 256);
+#endif
                 if (gd3_strings) {
                     memset(gd3_strings, 0, 11 * 256);
                 
@@ -1517,6 +1525,13 @@ skip_es8388_init:
         spk_cfg.pin_data_out = 48;
     }
     
+#ifdef CARDENZA
+    spk_cfg.pin_bck = 41;
+    spk_cfg.pin_ws = 43;
+    spk_cfg.pin_data_out = 42;
+    spk_cfg.stereo = true;
+    spk_cfg.use_dac = false;
+#endif
     M5.Speaker.config(spk_cfg);
     M5.Speaker.begin();
 #endif
