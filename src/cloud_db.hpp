@@ -11,6 +11,7 @@
 // ============================================================
 // Embedded DB Symbols (from platformio.ini board_build.embed_txtfiles)
 // ============================================================
+#ifndef CARDENZA_OFFLINE
 extern const uint8_t _binary_src_albums_bin_start[];
 extern const uint8_t _binary_src_albums_bin_end[];
 
@@ -28,6 +29,7 @@ extern const uint8_t _binary_src_systems_bin_end[];
 
 extern const uint8_t _binary_src_composers_bin_start[];
 extern const uint8_t _binary_src_composers_bin_end[];
+#endif
 
 // ============================================================
 // Struct Definitions
@@ -85,6 +87,48 @@ struct MasterRecord {
 // ============================================================
 // State
 // ============================================================
+#if defined(CARDENZA_OFFLINE) || defined(VGMM5_OFFLINE)
+// No catalog is included or reported ready; use the local SD browser.
+bool cloud_db_init() { return false; }
+bool cloud_db_is_ready() { return false; }
+uint32_t cloud_db_track_count() { return 0; }
+uint32_t cloud_db_album_count() { return 0; }
+String cloud_db_get_string(uint32_t offset) { return {}; }
+AlbumRecord cloud_db_get_album(uint16_t album_id) { return {}; }
+TrackRecord cloud_db_get_track(uint32_t track_id) { return {}; }
+String cloud_db_get_track_path(uint32_t track_id) { return {}; }
+String cloud_db_get_full_url(uint32_t track_id) { return {}; }
+String cloud_db_get_thumb_url(uint32_t thumb_offset) { return {}; }
+uint32_t calculateHash(const String& str) {
+    uint32_t hash = 2166136261u;
+    for (int i = 0; i < str.length(); i++) {
+        hash ^= (uint8_t)str[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+String cloud_db_get_album_title(uint16_t album_id) { return {}; }
+String cloud_db_get_track_title(uint32_t track_id) { return {}; }
+String cloud_db_format_duration(uint16_t duration_sec) {
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u:%02u", duration_sec / 60, duration_sec % 60);
+    return String(buf);
+}
+uint32_t cloud_db_company_count() { return 0; }
+uint32_t cloud_db_composer_count() { return 0; }
+uint32_t cloud_db_system_count() { return 0; }
+MasterRecord cloud_db_get_company(uint16_t index) { return {}; }
+MasterRecord cloud_db_get_system(uint16_t index) { return {}; }
+String cloud_db_get_company_name(uint16_t index) { return {}; }
+String cloud_db_get_system_name(uint16_t index) { return {}; }
+MasterRecord cloud_db_get_composer(uint16_t index) { return {}; }
+String cloud_db_get_composer_name(uint16_t index) { return {}; }
+uint16_t cloud_db_get_albums_all_supported(uint16_t* out_buf, uint16_t max) { return 0; }
+uint16_t cloud_db_get_albums_by_chip(uint32_t chip_mask, uint16_t* out_buf, uint16_t max) { return 0; }
+uint16_t cloud_db_get_albums_by_composer(uint16_t composer_id, uint16_t* out_buf, uint16_t max) { return 0; }
+uint16_t cloud_db_get_albums_by_company(uint16_t company_id, uint16_t* out_buf, uint16_t max) { return 0; }
+uint16_t cloud_db_get_tracks_by_album(uint16_t album_id, uint32_t* out_buf, uint16_t max) { return 0; }
+#else
 static uint32_t s_track_count   = 0;
 static uint32_t s_album_count   = 0;
 static uint32_t s_company_count = 0;
@@ -286,5 +330,7 @@ uint16_t cloud_db_get_tracks_by_album(uint16_t album_id, uint32_t* out_buf, uint
     }
     return count;
 }
+
+#endif // CARDENZA_OFFLINE
 
 #endif // IS_CARDPUTER

@@ -302,6 +302,11 @@ static void cores3_show_splash() {
 #endif // IS_CORES3
 
 void setup() {
+    Serial.begin(115200);
+    // HWCDC::begin re-enumerates USB; allow a bounded host reconnect once.
+    const uint32_t serialDeadline = millis() + 1000;
+    while (!Serial && (int32_t)(millis() - serialDeadline) < 0) delay(10);
+    Serial.println("vgm setup entered before BT release");
 #if defined(IS_ATOMS3)
     // ★大至急！ ここに移動させます。一番最初にUSBを起動し、PCの認識を待ちます
 //    update_namco_volumes(engine, ch);
@@ -315,6 +320,7 @@ void setup() {
 #endif
 
     auto cfg = M5.config();
+    cfg.internal_mic = false;
     
 #if defined(IS_ATOMS3)
     cfg.fallback_board = m5::board_t::board_M5AtomVoiceS3R;
@@ -323,8 +329,13 @@ void setup() {
 
 
     M5.begin(cfg);
-    Serial.begin(115200);
-
+    if (M5.isCardenza() && !M5.cardenzaCodecReady()) {
+        M5.Display.fillScreen(TFT_BLACK);
+        M5.Display.setTextSize(1);
+        M5.Display.drawString("Audio initialization failed", 6, 55);
+        Serial.println("Cardenza ES8156 setup failed");
+        for (;;) delay(1000);
+    }
     Serial.println("--- Boot Start ---"); // ★これがシリアルモニタに出るか確認！
     // 共通の再生エンジン初期化（I2S等の設定）
     Serial.println("Calling vgm_engine_init...");
@@ -761,6 +772,13 @@ void phase_file_selection() {
     if (keyChanged) {
         switch (current_state) {
             case STATE_BOOT_MENU: {
+#if defined(CARDENZA_OFFLINE) || defined(VGMM5_OFFLINE)
+                if (key == ' ' || key == '1' || enter_pressed) {
+                    current_state = STATE_LOCAL_MODE;
+                    cloud_force_redraw = true;
+                }
+                break;
+#endif
                 int tot = 3;
                 if (key == '.') move_cursor(1, tot);
                 else if (key == ';') move_cursor(-1, tot);
@@ -1049,6 +1067,16 @@ void phase_file_selection() {
         // 0. BOOT MENU
         // ============================================================
         case STATE_BOOT_MENU: {
+#if defined(CARDENZA_OFFLINE) || defined(VGMM5_OFFLINE)
+            canvas.setTextColor(CYAN);
+            canvas.drawString("vgmM5 - Cardenza", 10, 10);
+            canvas.setTextColor(WHITE);
+            canvas.drawString("1. Local SD", 10, 40);
+            canvas.setTextSize(1.0f);
+            canvas.drawString("Online catalog unavailable", 10, 68);
+            canvas.drawString("Enter / Space to open", 10, 110);
+            break;
+#endif
             const char* items[] = {"1. Online", "2. Local", "3. WiFi Setup"};
             int num_items = 3;
 

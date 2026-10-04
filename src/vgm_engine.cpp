@@ -385,7 +385,8 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
     vgm_data = nullptr;
     
     // PSRAMが利用可能な場合は、安全のため512KBを残して最大サイズを計算
-    size_t max_psram_size = ESP.getPsramSize() > 0 ? ESP.getFreePsram() - (512 * 1024) : 0;
+    const size_t free_psram = M5.isCardenza() ? 0 : ESP.getFreePsram();
+    size_t max_psram_size = free_psram > 512 * 1024 ? free_psram - 512 * 1024 : 0;
     
     // 曲のサイズがPSRAMの空き容量より大きい場合、またはPSRAMが無い場合のみストリーミング(Swap)にする
     if (uncompressed_size > max_psram_size || max_psram_size == 0) {
@@ -580,7 +581,7 @@ bool vgm_engine_play(const char* filepath, bool use_sd) {
             if (gd3_sig[0] == 'G' && gd3_sig[1] == 'd' && gd3_sig[2] == '3' && gd3_sig[3] == ' ') {
                 uint32_t str_offset = abs_gd3 + 12;
                 // スタックオーバーフロー回避のためPSRAMに確保
-                char (*gd3_strings)[256] = (char (*)[256])ps_malloc(11 * 256);
+                char (*gd3_strings)[256] = (char (*)[256])heap_caps_malloc(11 * 256, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
                 if (gd3_strings) {
                     memset(gd3_strings, 0, 11 * 256);
                 
